@@ -1,0 +1,1862 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ui version="4.0">
+ <class>TrajOptimizationDialogClass</class>
+ <widget class="QDialog" name="TrajOptimizationDialogClass">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>980</width>
+    <height>820</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>860</width>
+    <height>620</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>轨迹优化参数确定</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">/* Industrial control-room theme */
+QDialog#TrajOptimizationDialogClass {
+    background-color: #dfe5ea;
+}
+
+QWidget {
+    font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 12px;
+    color: #1f2b33;
+}
+
+QFrame#headerFrame {
+    background-color: #14212b;
+    border: none;
+    border-bottom: 1px solid #334652;
+}
+
+QFrame#headerAccentFrame {
+    background-color: #f2a900;
+    border: none;
+}
+
+QFrame#statusStripFrame {
+    background-color: #1d2e3a;
+    border: 1px solid #3b5361;
+    border-radius: 2px;
+}
+
+QFrame#trajectoryInfoFrame,
+QFrame#workpieceInfoFrame,
+QFrame#toolInfoFrame,
+QFrame#progressPanelFrame {
+    background-color: #eef3f6;
+    border: 1px solid #c7d2da;
+    border-left: 4px solid #2f6f95;
+    border-radius: 2px;
+}
+
+QFrame#footerFrame {
+    background-color: #f7f9fa;
+    border-top: 1px solid #b9c5cc;
+}
+
+QLabel {
+    color: #2d3c45;
+    background: transparent;
+}
+
+QLabel#headerTitleLabel {
+    color: #f7fbff;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+QLabel#headerSubtitleLabel {
+    color: #aebfc9;
+    font-size: 12px;
+}
+
+QLabel#headerTagLabel {
+    color: #151f27;
+    background-color: #f2a900;
+    border-radius: 2px;
+    padding: 4px 10px;
+    font-weight: 700;
+}
+
+QLabel#workflowLabel {
+    color: #d7e2e8;
+    font-weight: 600;
+}
+
+QLabel#parameterHintLabel,
+QLabel#resultHintLabel {
+    color: #60717b;
+}
+
+QLabel#trajectoryPointCountLabel,
+QLabel#workpieceNameLabel,
+QLabel#toolNameLabel,
+QLabel#collisionProgressInfoLabel {
+    color: #1b3646;
+    font-weight: 700;
+}
+
+QLabel#safePointsLabel,
+QLabel#collisionPointsLabel,
+QLabel#safetyRateLabel {
+    background-color: #f8fbfc;
+    border: 1px solid #c7d2da;
+    border-radius: 2px;
+    padding: 10px 12px;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+QGroupBox {
+    background-color: #f8fafb;
+    border: 1px solid #b9c5cc;
+    border-top: 3px solid #304858;
+    border-radius: 2px;
+    margin-top: 20px;
+    padding: 18px 14px 14px 14px;
+    font-weight: 700;
+    color: #182832;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    top: 0px;
+    padding: 4px 12px;
+    background-color: #304858;
+    color: #ffffff;
+    border-radius: 1px;
+}
+
+QGroupBox#trajectoryImportGroup {
+    border-top-color: #3f6f8f;
+}
+
+QGroupBox#workpieceImportGroup,
+QGroupBox#toolImportGroup {
+    border-top-color: #596a74;
+}
+
+QGroupBox#collisionDetectionGroup {
+    border-top-color: #0f6f8f;
+}
+
+QGroupBox#collisionDetectionGroup::title {
+    background-color: #0f6f8f;
+}
+
+QGroupBox#collisionResultGroup {
+    margin-top: 14px;
+    padding-top: 16px;
+}
+
+QLineEdit,
+QComboBox,
+QDoubleSpinBox,
+QSpinBox {
+    background-color: #ffffff;
+    border: 1px solid #9daeb8;
+    border-radius: 2px;
+    padding: 5px 8px;
+    min-height: 26px;
+    selection-background-color: #0f6f8f;
+    selection-color: #ffffff;
+}
+
+QLineEdit:focus,
+QComboBox:focus,
+QDoubleSpinBox:focus,
+QSpinBox:focus {
+    border: 1px solid #0f6f8f;
+    background-color: #fbfdfe;
+}
+
+QLineEdit:read-only {
+    background-color: #eef3f6;
+    color: #43545e;
+}
+
+QComboBox:disabled,
+QDoubleSpinBox:disabled,
+QLineEdit:disabled {
+    background-color: #e3e9ed;
+    color: #8898a2;
+}
+
+QComboBox::drop-down {
+    width: 28px;
+    border-left: 1px solid #c0ccd3;
+}
+
+QComboBox QAbstractItemView {
+    border: 1px solid #9daeb8;
+    background-color: #ffffff;
+    selection-background-color: #0f6f8f;
+    selection-color: #ffffff;
+    outline: none;
+}
+
+QPushButton {
+    background-color: #344957;
+    color: #ffffff;
+    border: 1px solid #263945;
+    border-radius: 2px;
+    padding: 6px 14px;
+    min-height: 28px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #263945;
+}
+
+QPushButton:pressed {
+    background-color: #172630;
+}
+
+QPushButton:disabled {
+    background-color: #d1d9de;
+    border-color: #c1ccd3;
+    color: #8998a1;
+}
+
+QRadioButton,
+QCheckBox {
+    color: #2d3c45;
+    spacing: 8px;
+    background: transparent;
+}
+
+QRadioButton::indicator,
+QCheckBox::indicator {
+    width: 15px;
+    height: 15px;
+}
+
+QProgressBar {
+    border: 1px solid #9daeb8;
+    border-radius: 2px;
+    background-color: #dbe4e9;
+    text-align: center;
+    color: #14212b;
+    min-height: 24px;
+    font-weight: 700;
+}
+
+QProgressBar::chunk {
+    background-color: #0f6f8f;
+    border-radius: 1px;
+}
+
+QScrollArea {
+    border: none;
+    background: transparent;
+}
+
+QScrollArea &gt; QWidget &gt; QWidget {
+    background: transparent;
+}
+
+QScrollBar:vertical {
+    background: #dfe5ea;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #95a6b0;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #6f838e;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="QFrame" name="headerFrame">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>104</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>118</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="headerOuterLayout">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="headerAccentFrame">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>4</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>4</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="headerLayout">
+        <property name="spacing">
+         <number>18</number>
+        </property>
+        <property name="leftMargin">
+         <number>24</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>24</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <layout class="QVBoxLayout" name="headerTextLayout">
+          <property name="spacing">
+           <number>8</number>
+          </property>
+          <item>
+           <layout class="QHBoxLayout" name="headerTitleLayout">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="headerTitleLabel">
+              <property name="text">
+               <string>轨迹优化参数确定</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="headerTagLabel">
+              <property name="text">
+               <string>TRAJ OPT</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="headerTitleSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>0</width>
+                <height>0</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="headerSubtitleLabel">
+            <property name="text">
+             <string>轨迹导入 / 模型装载 / 无碰撞检测 / 容差范围确定</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QFrame" name="statusStripFrame">
+            <layout class="QHBoxLayout" name="statusStripLayout">
+             <property name="spacing">
+              <number>16</number>
+             </property>
+             <property name="leftMargin">
+              <number>10</number>
+             </property>
+             <property name="topMargin">
+              <number>6</number>
+             </property>
+             <property name="rightMargin">
+              <number>10</number>
+             </property>
+             <property name="bottomMargin">
+              <number>6</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="workflowLabel">
+               <property name="text">
+                <string>流程: 01 轨迹  &gt;  02 工件  &gt;  03 工具  &gt;  04 检测</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="statusStripSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>0</width>
+                 <height>0</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QLabel" name="headerImageLabel">
+          <property name="minimumSize">
+           <size>
+            <width>250</width>
+            <height>78</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>310</width>
+            <height>84</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QLabel#headerImageLabel {
+    border: 1px solid #445965;
+    border-radius: 2px;
+    background-color: #101a21;
+}</string>
+          </property>
+          <property name="pixmap">
+           <pixmap resource="TrajOptimizationDialog.qrc">:/TrajOptimizationDialog/images/spraying.png</pixmap>
+          </property>
+          <property name="scaledContents">
+           <bool>true</bool>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>960</width>
+        <height>1180</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="contentLayout">
+       <property name="spacing">
+        <number>16</number>
+       </property>
+       <property name="leftMargin">
+        <number>18</number>
+       </property>
+       <property name="topMargin">
+        <number>16</number>
+       </property>
+       <property name="rightMargin">
+        <number>18</number>
+       </property>
+       <property name="bottomMargin">
+        <number>16</number>
+       </property>
+       <item>
+        <layout class="QVBoxLayout" name="leftColumnLayout">
+         <property name="spacing">
+          <number>14</number>
+         </property>
+         <item>
+          <widget class="QGroupBox" name="trajectoryImportGroup">
+           <property name="title">
+            <string>01 轨迹导入</string>
+           </property>
+           <layout class="QVBoxLayout" name="trajectoryImportLayout">
+            <property name="spacing">
+             <number>9</number>
+            </property>
+            <item>
+             <widget class="QLineEdit" name="trajectoryFileLineEdit">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+              <property name="placeholderText">
+               <string>请选择轨迹文件，支持 .txt / .csv 格式</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="trajectorySourceLayout">
+              <property name="spacing">
+               <number>12</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="trajectorySourceLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>86</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>轨迹来源</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="trajectoryFromFileRadio">
+                <property name="text">
+                 <string>从文件导入</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QRadioButton" name="trajectoryFromSystemRadio">
+                <property name="text">
+                 <string>从系统导入</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="trajectorySourceSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>0</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="trajectoryFileLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="trajectoryFileLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>86</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>文件轨迹</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="browseTrajectoryButton">
+                <property name="text">
+                 <string>浏览...</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="loadTrajectoryFromFileButton">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="text">
+                 <string>加载文件</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="trajectoryFileSpacer">
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>0</width>
+                  <height>0</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="trajectorySystemLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="trajectorySystemLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>86</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>系统轨迹</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="systemTrajectoryComboBox">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>-- 请选择系统轨迹 --</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="refreshSystemTrajectoryButton">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="text">
+                 <string>刷新列表</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="loadTrajectoryFromSystemButton">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QPushButton {
+    background-color: #b96f00;
+    color: #ffffff;
+    border: 1px solid #8f5600;
+    font-weight: 700;
+}
+QPushButton:hover { background-color: #9f5f00; }
+QPushButton:pressed { background-color: #7d4b00; }
+QPushButton:disabled { background-color: #d1d9de; border-color: #c1ccd3; color: #8998a1; }</string>
+                </property>
+                <property name="text">
+                 <string>从系统加载</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QFrame" name="trajectoryInfoFrame">
+              <layout class="QHBoxLayout" name="trajectoryInfoLayout">
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>7</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>7</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="trajectoryPointCountLabel">
+                 <property name="text">
+                  <string>轨迹点数: 0</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="generatedTrajectoryPointCountLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #60727f;</string>
+                 </property>
+                 <property name="text">
+                  <string>生成轨迹点: 0</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="trajectoryStatusLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #60727f;</string>
+                 </property>
+                 <property name="text">
+                  <string>状态: 未加载</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="trajectoryInfoSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>0</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="workpieceImportGroup">
+           <property name="title">
+            <string>02 工件模型</string>
+           </property>
+           <layout class="QVBoxLayout" name="workpieceImportLayout">
+            <property name="spacing">
+             <number>9</number>
+            </property>
+            <item>
+             <layout class="QHBoxLayout" name="workpieceFileLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="workpieceFileLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>86</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>工件文件</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="workpieceFileLineEdit">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+                <property name="placeholderText">
+                 <string>请选择工件模型文件，支持 .stl / .obj / .xml 格式</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="browseWorkpieceButton">
+                <property name="text">
+                 <string>浏览...</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="loadWorkpieceButton">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="text">
+                 <string>加载工件</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QFrame" name="workpieceInfoFrame">
+              <layout class="QHBoxLayout" name="workpieceInfoLayout">
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>7</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>7</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="workpieceNameLabel">
+                 <property name="text">
+                  <string>工件名称: --</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="workpieceStatusLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #60727f;</string>
+                 </property>
+                 <property name="text">
+                  <string>状态: 未加载</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="workpieceInfoSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>0</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="toolImportGroup">
+           <property name="title">
+            <string>03 工具模型</string>
+           </property>
+           <layout class="QVBoxLayout" name="toolImportLayout">
+            <property name="spacing">
+             <number>9</number>
+            </property>
+            <item>
+             <layout class="QHBoxLayout" name="toolFileLayout">
+              <property name="spacing">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="toolFileLabel">
+                <property name="minimumSize">
+                 <size>
+                  <width>86</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>工具文件</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="toolFileLineEdit">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+                <property name="placeholderText">
+                 <string>请选择工具模型文件，支持 .stl / .obj / .xml 格式</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="browseToolButton">
+                <property name="text">
+                 <string>浏览...</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="loadToolButton">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="text">
+                 <string>加载工具</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QFrame" name="toolInfoFrame">
+              <layout class="QHBoxLayout" name="toolInfoLayout">
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>7</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>7</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="toolNameLabel">
+                 <property name="text">
+                  <string>工具名称: --</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="toolStatusLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #60727f;</string>
+                 </property>
+                 <property name="text">
+                  <string>状态: 未加载</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="toolInfoSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>0</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="rightColumnLayout">
+         <property name="spacing">
+          <number>14</number>
+         </property>
+         <item>
+          <widget class="QGroupBox" name="collisionDetectionGroup">
+           <property name="title">
+            <string>04 无碰撞检测与范围确定</string>
+           </property>
+           <layout class="QVBoxLayout" name="collisionDetectionLayout">
+            <property name="spacing">
+             <number>12</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="parameterHintLabel">
+              <property name="text">
+               <string>设置允许的平移、旋转搜索范围与判定精度，随后执行轨迹安全性计算。</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QGridLayout" name="collisionParamsGrid">
+              <property name="horizontalSpacing">
+               <number>14</number>
+              </property>
+              <property name="verticalSpacing">
+               <number>12</number>
+              </property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="translationLimitLabel">
+                <property name="text">
+                 <string>平移调整范围</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QDoubleSpinBox" name="translationLimitSpinBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="suffix">
+                 <string> mm</string>
+                </property>
+                <property name="minimum">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>500.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>50.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QLabel" name="rotationLimitLabel">
+                <property name="text">
+                 <string>旋转调整范围</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QDoubleSpinBox" name="rotationLimitSpinBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="suffix">
+                 <string> deg</string>
+                </property>
+                <property name="minimum">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>180.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>5.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="positionToleranceLabel">
+                <property name="text">
+                 <string>平移精度阈值</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QDoubleSpinBox" name="positionToleranceSpinBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="suffix">
+                 <string> mm</string>
+                </property>
+                <property name="decimals">
+                 <number>2</number>
+                </property>
+                <property name="minimum">
+                 <double>0.010000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>10.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.100000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QLabel" name="rotationToleranceLabel">
+                <property name="text">
+                 <string>旋转精度阈值</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="3">
+               <widget class="QDoubleSpinBox" name="rotationToleranceSpinBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>130</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="suffix">
+                 <string> deg</string>
+                </property>
+                <property name="decimals">
+                 <number>2</number>
+                </property>
+                <property name="minimum">
+                 <double>0.010000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>10.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.500000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="optimizationAlgorithmLabel">
+                <property name="text">
+                 <string>优化算法</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1" colspan="3">
+               <widget class="QComboBox" name="optimizationAlgorithmComboBox">
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>32</height>
+                 </size>
+                </property>
+                <item>
+                 <property name="text">
+                  <string>传统 GA + 双向 RRT</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>并行遗传 GA + RRT</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>蚁群算法 (ACO)</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="3" column="0" colspan="4">
+               <widget class="QCheckBox" name="enableVisualizationCheckBox">
+                <property name="text">
+                 <string>启用可视化计算过程（可能降低速度）</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="collisionDetectionButtonLayout">
+              <property name="spacing">
+               <number>10</number>
+              </property>
+              <item>
+               <widget class="QPushButton" name="startCollisionDetectionButton">
+                <property name="enabled">
+                 <bool>true</bool>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>0</width>
+                  <height>40</height>
+                 </size>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QPushButton {
+    background-color: #0f6f8f;
+    color: #ffffff;
+    border: 1px solid #0b526a;
+    font-weight: 700;
+    font-size: 14px;
+    border-radius: 2px;
+}
+QPushButton:hover { background-color: #0b5f7c; }
+QPushButton:pressed { background-color: #084b61; }
+QPushButton:disabled { background-color: #d1d9de; border-color: #c1ccd3; color: #8998a1; }</string>
+                </property>
+                <property name="text">
+                 <string>开始无碰撞检测与范围确定</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="stopCollisionDetectionButton">
+                <property name="enabled">
+                 <bool>true</bool>
+                </property>
+                <property name="minimumSize">
+                 <size>
+                  <width>96</width>
+                  <height>40</height>
+                 </size>
+                </property>
+                <property name="styleSheet">
+                 <string notr="true">QPushButton {
+    background-color: #f7f9fa;
+    color: #2f414d;
+    font-weight: 700;
+    border: 1px solid #9daeb8;
+}
+QPushButton:hover { background-color: #e9eff2; }
+QPushButton:pressed { background-color: #d7e0e5; }
+QPushButton:disabled { background-color: #edf2f5; border-color: #c8d2d8; color: #a0adb5; }</string>
+                </property>
+                <property name="text">
+                 <string>停止</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QFrame" name="progressPanelFrame">
+              <layout class="QVBoxLayout" name="progressPanelLayout">
+               <property name="spacing">
+                <number>8</number>
+               </property>
+               <property name="leftMargin">
+                <number>10</number>
+               </property>
+               <property name="topMargin">
+                <number>8</number>
+               </property>
+               <property name="rightMargin">
+                <number>10</number>
+               </property>
+               <property name="bottomMargin">
+                <number>8</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="collisionProgressLayout">
+                 <property name="spacing">
+                  <number>8</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="collisionProgressLabel">
+                   <property name="text">
+                    <string>检测进度</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QProgressBar" name="collisionProgressBar">
+                   <property name="value">
+                    <number>0</number>
+                   </property>
+                   <property name="textVisible">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="collisionProgressInfoLabel">
+                   <property name="minimumSize">
+                    <size>
+                     <width>86</width>
+                     <height>0</height>
+                    </size>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignRight|Qt::AlignVCenter</set>
+                   </property>
+                   <property name="text">
+                    <string>0 / 0</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="collisionResultGroup">
+              <property name="title">
+               <string>检测结果</string>
+              </property>
+              <layout class="QGridLayout" name="collisionResultGrid">
+               <property name="horizontalSpacing">
+                <number>10</number>
+               </property>
+               <property name="verticalSpacing">
+                <number>9</number>
+               </property>
+               <item row="0" column="0">
+                <widget class="QLabel" name="safePointsLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #1f7a3d;</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="text">
+                  <string>安全点数: 0</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLabel" name="collisionPointsLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #b42318;</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="text">
+                  <string>碰撞点数: 0</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QLabel" name="safetyRateLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #0f5f8f;</string>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="text">
+                  <string>安全率: 0%</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0" colspan="3">
+                <widget class="QLabel" name="avgToleranceLabel">
+                 <property name="text">
+                  <string>平均容差范围: 平移 +/-0.0 mm, 旋转 +/-0.0 deg</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0" colspan="3">
+                <widget class="QLabel" name="avgCalculationTimeLabel">
+                 <property name="styleSheet">
+                  <string notr="true">color: #0f5f8f;</string>
+                 </property>
+                 <property name="text">
+                  <string>平均计算时间: 0.0 ms/点</string>
+                 </property>
+                 <property name="wordWrap">
+                  <bool>true</bool>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0" colspan="3">
+                <widget class="QLabel" name="resultHintLabel">
+                 <property name="text">
+                  <string>结果将用于导出优化后的安全轨迹和配置参数。</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="footerFrame">
+     <layout class="QHBoxLayout" name="bottomButtonLayout">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <property name="leftMargin">
+       <number>16</number>
+      </property>
+      <property name="topMargin">
+       <number>12</number>
+      </property>
+      <property name="rightMargin">
+       <number>16</number>
+      </property>
+      <property name="bottomMargin">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QPushButton" name="clearAllModelsButton">
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #fff7f5;
+    color: #a3362d;
+    border: 1px solid #d39a93;
+    font-weight: 700;
+}
+QPushButton:hover { background-color: #ffecea; }
+QPushButton:pressed { background-color: #ffd3cf; }</string>
+        </property>
+        <property name="text">
+         <string>清除所有模型</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="trajectoryTransformButton">
+        <property name="minimumSize">
+         <size>
+          <width>116</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #0f6f8f;
+    color: #ffffff;
+    border: 1px solid #0b526a;
+    font-weight: 700;
+}
+QPushButton:hover { background-color: #0b5f7c; }
+QPushButton:pressed { background-color: #084b61; }</string>
+        </property>
+        <property name="text">
+        <string>Transform</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="trajectoryPlaybackButton">
+        <property name="minimumSize">
+         <size>
+          <width>116</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #b96f00;
+    color: #ffffff;
+    border: 1px solid #8f5600;
+    font-weight: 700;
+}
+QPushButton:hover { background-color: #9f5f00; }
+QPushButton:pressed { background-color: #7d4b00; }</string>
+        </property>
+        <property name="text">
+         <string>Playback</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="exportResultButton">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>96</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>导出结果</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="saveConfigButton">
+        <property name="minimumSize">
+         <size>
+          <width>96</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>保存配置</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="bottomSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>0</width>
+          <height>0</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="closeButton">
+        <property name="minimumSize">
+         <size>
+          <width>96</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>关闭</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <layoutdefault spacing="6" margin="11" />
+ <resources>
+  <include location="TrajOptimizationDialog.qrc" />
+ </resources>
+ <connections>
+  <connection>
+   <sender>optimizationAlgorithmComboBox</sender>
+   <signal>currentIndexChanged(int)</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onOptimizationAlgorithmIndexChanged(int)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>trajectoryFromFileRadio</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onTrajectoryFromFileToggled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>trajectoryFromSystemRadio</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onTrajectoryFromSystemToggled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>browseTrajectoryButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onBrowseTrajectoryClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>loadTrajectoryFromFileButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onLoadTrajectoryFromFileClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>refreshSystemTrajectoryButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onRefreshSystemTrajectoryClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>loadTrajectoryFromSystemButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onLoadTrajectoryFromSystemClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>browseWorkpieceButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onBrowseWorkpieceClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>loadWorkpieceButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onLoadWorkpieceClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>browseToolButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onBrowseToolClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>loadToolButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onLoadToolClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>clearAllModelsButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onClearAllModelsClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>startCollisionDetectionButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onStartCollisionDetectionClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>stopCollisionDetectionButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onStopCollisionDetectionClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>exportResultButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onExportResultClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>saveConfigButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onSaveConfigClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>closeButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>close()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>trajectoryTransformButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onOpenTrajectoryTransformClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>trajectoryPlaybackButton</sender>
+   <signal>clicked()</signal>
+   <receiver>TrajOptimizationDialogClass</receiver>
+   <slot>onOpenTrajectoryPlaybackClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>20</x>
+     <y>20</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+ <slots>
+  <slot>onClearAllModelsClicked()</slot>
+  <slot>onOpenTrajectoryTransformClicked()</slot>
+  <slot>onOpenTrajectoryPlaybackClicked()</slot>
+ </slots>
+</ui>

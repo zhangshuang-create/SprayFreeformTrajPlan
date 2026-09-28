@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/TrajOptimizationDialog">
+        <file alias="images/spraying.png">../../../../Applications/BasicSystemBuilder/src/images/spraying.png</file>
+    </qresource>
+</RCC>
