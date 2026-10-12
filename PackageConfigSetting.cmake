@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 message(STATUS "!!!!!!Package ${PACKAGE_NAME} configuration is set here!!!!!!")
 
 set(${PACKAGE_NAME}_PublicComponents
+    FreeformTrajPlanRender
     FreeformTrajPlanWorkbench
 )
 
@@ -13,6 +14,7 @@ set(${PACKAGE_NAME}_ExportComponents
 )
 
 set(${PACKAGE_NAME}_Components
+    FreeformTrajPlanRender
     FreeformTrajPlanWorkbench
 )
 

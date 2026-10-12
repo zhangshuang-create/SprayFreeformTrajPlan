@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+add_executable(FTBLSlicePreviewTest main.cpp)
+target_link_libraries(FTBLSlicePreviewTest PRIVATE
+    SMRobotWorkbenchFreeformTrajPlan::FreeformTrajPlanRender)
+target_compile_features(FTBLSlicePreviewTest PRIVATE cxx_std_17)
+set_target_properties(FTBLSlicePreviewTest PROPERTIES FOLDER tests/SMRobotWorkbenchFreeformTrajPlan)
+add_test(NAME FreeformTrajPlanBoundarylessSlicePlanePreviewTest COMMAND $<TARGET_FILE:FTBLSlicePreviewTest>)
+set_tests_properties(FreeformTrajPlanBoundarylessSlicePlanePreviewTest PROPERTIES LABELS "SMRobotWorkbenchFreeformTrajPlan;FreeformTrajPlanRender;BoundarylessSlicing")

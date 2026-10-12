@@ -1,0 +1,9 @@
+#pragma once
+
+#include <QtCore/qglobal.h>
+
+#if defined(FREEFORM_TRAJ_PLAN_WORKBENCH_BUILD)
+#define FREEFORM_TRAJ_PLAN_WORKBENCH_API Q_DECL_EXPORT
+#else
+#define FREEFORM_TRAJ_PLAN_WORKBENCH_API Q_DECL_IMPORT
+#endif

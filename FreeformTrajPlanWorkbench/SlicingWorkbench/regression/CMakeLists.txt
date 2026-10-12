@@ -1,0 +1,7 @@
+add_subdirectory(ModelPointLineSurfaceTest)
+add_subdirectory(ModelSurfacePreviewTest)
+add_subdirectory(BoundaryLinePreviewTest)
+add_subdirectory(SlicePlanePreviewTest)
+add_subdirectory(BoundarylessSlicePlanePreviewTest)
+add_subdirectory(TrajectoryFramePreviewTest)
+add_subdirectory(TrajectoryConnectionPreviewTest)

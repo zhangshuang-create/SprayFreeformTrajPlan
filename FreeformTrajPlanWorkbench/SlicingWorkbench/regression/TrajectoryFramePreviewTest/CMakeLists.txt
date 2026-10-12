@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.20)
+add_executable(FTTrajectoryFramePreviewTest main.cpp)
+target_link_libraries(FTTrajectoryFramePreviewTest PRIVATE
+    SMRobotWorkbenchFreeformTrajPlan::FreeformTrajPlanRender
+    SMRobotApps::RobotViewerCore
+    Qt5::Widgets)
+target_compile_features(FTTrajectoryFramePreviewTest PRIVATE cxx_std_17)
+set_target_properties(FTTrajectoryFramePreviewTest PROPERTIES FOLDER tests/SMRobotWorkbenchFreeformTrajPlan)
+add_test(NAME FreeformTrajPlanTrajectoryFramePreviewTest COMMAND $<TARGET_FILE:FTTrajectoryFramePreviewTest> --verify)
+set_tests_properties(FreeformTrajPlanTrajectoryFramePreviewTest PROPERTIES LABELS "SMRobotWorkbenchFreeformTrajPlan;FreeformTrajPlanRender;Trajectory;Frame")
