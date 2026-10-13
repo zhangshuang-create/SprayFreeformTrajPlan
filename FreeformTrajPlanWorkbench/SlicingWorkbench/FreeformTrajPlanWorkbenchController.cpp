@@ -1406,9 +1406,9 @@ namespace smrobot::workbench::freeform
         auto* controlGroup = new QGroupBox(QStringLiteral("切片控制"), dialog);
         auto* controlLayout = new QVBoxLayout(controlGroup);
         auto* table = new QTableWidget(controlGroup);
-        table->setColumnCount(4);
+        table->setColumnCount(5);
         table->setHorizontalHeaderLabels({ QStringLiteral("层"), QStringLiteral("Z 位置"),
-            QStringLiteral("厚度"), QStringLiteral("轮廓点数") });
+            QStringLiteral("厚度"), QStringLiteral("轮廓点数"), QStringLiteral("轮廓长度 (mm)") });
         table->setSelectionBehavior(QAbstractItemView::SelectRows);
         table->setSelectionMode(QAbstractItemView::SingleSelection);
         table->horizontalHeader()->setStretchLastSection(true);
@@ -1550,7 +1550,40 @@ namespace smrobot::workbench::freeform
             state->rebuilding = true;
             const QSignalBlocker block(table);
             table->clearContents();
-            table->setRowCount(static_cast<int>(planes.size()));
+            const auto& boundaries = m_generalData.boundaryData_;
+            const bool includeBounds = !m_generalData.slicingData_.currentSliceResult_.isBoundarylessFallback
+                && !boundaries.lowerBoundary_.points.empty() && !boundaries.upperBoundary_.points.empty();
+            const int rowOffset = includeBounds ? 1 : 0;
+            table->setRowCount(static_cast<int>(planes.size()) + (includeBounds ? 2 : 0));
+            const auto arcLength = [](const ModelTrajPlan::BoundaryLine& line) {
+                double length = 0.0;
+                for (size_t i = 1; i < line.points.size(); ++i)
+                    length += (line.points[i].position - line.points[i - 1].position).norm();
+                return length;
+            };
+            const auto addBoundaryRow = [table, arcLength](int row, const QString& label,
+                const ModelTrajPlan::BoundaryLine& line) {
+                double z = 0.0;
+                for (const auto& point : line.points) z += point.position.z();
+                z /= static_cast<double>(line.points.size());
+                // Physical boundary loops may omit a duplicated final point.
+                // Include their closing edge exactly once in the perimeter.
+                const double length = arcLength(line) +
+                    (line.points.front().position - line.points.back().position).norm();
+                const QStringList values{label, QString::number(z, 'f', 3),
+                    QStringLiteral("-"), QStringLiteral("-"), QString::number(length, 'f', 3)};
+                for (int column = 0; column < values.size(); ++column) {
+                    auto* item = new QTableWidgetItem(values[column]);
+                    item->setFlags(Qt::ItemIsEnabled); // Informational row, not an editable slice.
+                    item->setData(Qt::UserRole, -1);
+                    item->setToolTip(QStringLiteral("模型边界，只读；Z 位置为轮廓点的平均高度。"));
+                    table->setItem(row, column, item);
+                }
+            };
+            if (includeBounds) {
+                addBoundaryRow(0, QStringLiteral("下边界"), boundaries.lowerBoundary_);
+                addBoundaryRow(static_cast<int>(planes.size()) + 1, QStringLiteral("上边界"), boundaries.upperBoundary_);
+            }
             double minZ = std::numeric_limits<double>::max();
             double maxZ = std::numeric_limits<double>::lowest();
             for(std::size_t index = 0; index < planes.size(); ++index) {
@@ -1562,6 +1595,7 @@ namespace smrobot::workbench::freeform
                 const int contourCount = index < m_generalData.slicingData_.currentSliceResult_.internalBoundaries.size()
                     ? static_cast<int>(m_generalData.slicingData_.currentSliceResult_.internalBoundaries[index].points.size()) : 0;
                 auto* layerItem = new QTableWidgetItem(QString::number(plane.layer_index));
+                layerItem->setData(Qt::UserRole, static_cast<int>(index));
                 layerItem->setFlags(layerItem->flags() & ~Qt::ItemIsEditable);
                 auto* zItem = new QTableWidgetItem(QString::number(z, 'f', 3));
                 auto* thicknessItem = new QTableWidgetItem(index + 1 < planes.size()
@@ -1569,13 +1603,18 @@ namespace smrobot::workbench::freeform
                 thicknessItem->setFlags(thicknessItem->flags() & ~Qt::ItemIsEditable);
                 auto* contourItem = new QTableWidgetItem(QString::number(contourCount));
                 contourItem->setFlags(contourItem->flags() & ~Qt::ItemIsEditable);
-                table->setItem(static_cast<int>(index), 0, layerItem);
-                table->setItem(static_cast<int>(index), 1, zItem);
-                table->setItem(static_cast<int>(index), 2, thicknessItem);
-                table->setItem(static_cast<int>(index), 3, contourItem);
+                table->setItem(static_cast<int>(index) + rowOffset, 0, layerItem);
+                table->setItem(static_cast<int>(index) + rowOffset, 1, zItem);
+                table->setItem(static_cast<int>(index) + rowOffset, 2, thicknessItem);
+                table->setItem(static_cast<int>(index) + rowOffset, 3, contourItem);
+                const auto& contours = m_generalData.slicingData_.currentSliceResult_.internalBoundaries;
+                auto* lengthItem = new QTableWidgetItem(index < contours.size()
+                    ? QString::number(arcLength(contours[index]), 'f', 3) : QStringLiteral("-"));
+                lengthItem->setFlags(lengthItem->flags() & ~Qt::ItemIsEditable);
+                table->setItem(static_cast<int>(index) + rowOffset, 4, lengthItem);
             }
             table->resizeColumnsToContents();
-            table->selectRow(state->selectedIndex);
+            table->selectRow(state->selectedIndex + rowOffset);
             currentLayer->setText(QStringLiteral("当前层: %1").arg(state->selectedIndex + 1));
             rangeLabel->setText(QStringLiteral("范围: [%1, %2] mm").arg(minZ, 0, 'f', 3).arg(maxZ, 0, 'f', 3));
             state->rebuilding = false;
@@ -1588,13 +1627,19 @@ namespace smrobot::workbench::freeform
         };
 
         connect(table, &QTableWidget::currentCellChanged, dialog,
-            [state, selectAndLoad](int row, int, int, int) { if(!state->rebuilding && row >= 0) selectAndLoad(row); });
+            [state, table, selectAndLoad](int row, int, int, int) {
+                if (state->rebuilding || row < 0 || !table->item(row, 0)) return;
+                const int index = table->item(row, 0)->data(Qt::UserRole).toInt();
+                if (index >= 0) selectAndLoad(index);
+            });
         connect(table, &QTableWidget::itemChanged, dialog,
-            [state, tz, updateSelectedPlane, rebuildTable](QTableWidgetItem* item) {
+            [state, table, tz, updateSelectedPlane, rebuildTable](QTableWidgetItem* item) {
                 if(state->rebuilding || item == nullptr || item->column() != 1) return;
                 bool valid = false; const double z = item->text().toDouble(&valid);
                 if(!valid) { rebuildTable(); return; }
-                state->selectedIndex = item->row();
+                const int index = table->item(item->row(), 0)->data(Qt::UserRole).toInt();
+                if (index < 0) { rebuildTable(); return; }
+                state->selectedIndex = index;
                 { const QSignalBlocker blocker(tz); tz->setValue(z); }
                 updateSelectedPlane();
                 rebuildTable();
