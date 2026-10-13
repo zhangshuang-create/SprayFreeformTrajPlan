@@ -1,4 +1,5 @@
 #include "FreeformTrajPlanWorkbenchContribution.h"
+#include "RobotQtViewerDocumentViewRegistry.h"
 
 #include "FreeformTrajPlanWorkbenchController.h"
 #include "FreeformTrajPlanWorkbenchPanel.h"
@@ -58,6 +59,7 @@ namespace robot_qt_viewer
                     *workflowPanel,
                     *parameterPanel,
                     *composition.documentContext,
+                    composition.dataSource,
                     {},
                     {},
                     parameterPanel);
@@ -72,6 +74,16 @@ namespace robot_qt_viewer
                         }
                     });
 
+                if(composition.documentViewRegistry) {
+                    composition.documentViewRegistry->registerModule(QStringLiteral("freeformPlanning"),controller,
+                        [controller](const RobotQtViewerEvent& event){controller->handleEvent(event);},
+                        {
+                            RobotQtViewerEventKind::ProjectOpened,
+                            RobotQtViewerEventKind::ProjectDocumentChanged,
+                            RobotQtViewerEventKind::ViewportReloaded,
+                            RobotQtViewerEventKind::SelectionChanged
+                        });
+                }
                 composition.installLeftPanel(workflowScrollArea);
 
                 return std::unique_ptr<RobotQtViewerWorkbenchRuntimeContribution>(

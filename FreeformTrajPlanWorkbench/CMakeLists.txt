@@ -35,6 +35,7 @@ target_include_directories(${TARGET_NAME}
 target_link_libraries(${TARGET_NAME}
     PUBLIC
         SMRobotSpray::SprayFreeformTrajPlan
+        SMRobotSpray::SprayTrajectoryCore
         UVTrajPlan::TrajModule
         SMRobotWorkbenchFreeformTrajPlan::FreeformTrajPlanRender
         SMRobotWorkbenchCommon::RobotQtModulesShared

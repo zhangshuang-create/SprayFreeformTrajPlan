@@ -1,4 +1,5 @@
 #include "FreeformTrajPlanWorkbenchController.h"
+#include <UVTrajPlan/TrajectoryExporter.h>
 #include "FreeformTrajPlanWorkbenchPanel.h"
 #include "RobotQtViewerEvents.h"
 #include "RobotQtViewerDocumentContext.h"
@@ -361,9 +362,11 @@ namespace smrobot::workbench::freeform
     FreeformTrajPlanWorkbenchController::FreeformTrajPlanWorkbenchController(
         FreeformTrajPlanWorkflowPanel& workflowPanel, FreeformTrajPlanParameterPanel& parameterPanel,
         robot_qt_viewer::RobotQtViewerDocumentContext& context,
+        robot_qt_viewer::PlanningDataSource* dataSource,
         FreeformTrajPlanPreviewUpdatedCallback previewUpdated,
         FreeformTrajPlanPreviewClearedCallback previewCleared, QObject* parent)
         : QObject(parent), m_workflowPanel(workflowPanel), m_parameterPanel(parameterPanel), m_context(context),
+          m_dataSource(dataSource),
           m_previewUpdated(std::move(previewUpdated)), m_previewCleared(std::move(previewCleared))
     {
         QSettings settings;
@@ -405,6 +408,12 @@ namespace smrobot::workbench::freeform
             }
             m_plan.clear(m_generalData);
             m_modelObjectId.clear();
+            m_modelPath.clear();
+            m_uvPipeline.clearModel();
+            m_uvPlanning=false;
+            if(m_dataSource != nullptr) {
+                m_dataSource->clear();
+            }
             clearAllOverlays(m_context.visualizationViewport());
             if(m_previewCleared) {
                 m_previewCleared();
@@ -424,6 +433,7 @@ namespace smrobot::workbench::freeform
         m_parameterPanel.setPlanningMethod(method);
         showResult(true, uv ? QStringLiteral("UV 轨迹规划已启用。")
                             : QStringLiteral("切片轨迹规划已启用。"));
+        publishSharedData();
     }
     void FreeformTrajPlanWorkbenchController::importModel(const QString& path)
     {
@@ -539,6 +549,7 @@ namespace smrobot::workbench::freeform
         m_generalData.boundaryData_.epsilon_ = chordErrorTolerance;
         m_generalData.boundaryData_.minStep_ = minimumSpacing;
         m_workflowPanel.setModelPath(path);
+        publishSharedData();
 
         // New model invalidates all temporary slice, trajectory, and connection overlays.
         clearAllOverlays(m_context.visualizationViewport());
@@ -848,6 +859,7 @@ namespace smrobot::workbench::freeform
                     m_algorithmToSceneScale);
             }
         }
+        if(success) publishSharedData();
         showResult(success, message);
     }
 
@@ -940,6 +952,8 @@ namespace smrobot::workbench::freeform
         setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible, m_connectionsVisible, m_referenceLinesVisible);
         if(!trajectory.trajectoryPoints_.empty() && m_previewUpdated) m_previewUpdated(m_renderer.makePreview(trajectory.trajectoryPoints_));
         if(trajectory.trajectoryPoints_.empty()) updatePreview();
+        m_uvPipeline.clearModel();
+        publishSharedData();
         showResult(true, QStringLiteral("姿态配置已保存，已有轨迹姿态已更新。"));
         });
         updatePreview();
@@ -1079,6 +1093,7 @@ namespace smrobot::workbench::freeform
         }
         setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible,
             m_connectionsVisible, m_referenceLinesVisible);
+        publishSharedData();
         return true;
     }
 
@@ -1635,6 +1650,69 @@ namespace smrobot::workbench::freeform
         m_workflowPanel.setStatus(message, success);
         emit statusMessageRequested(message, success ? 3000 : 6000);
     }
+
+    void FreeformTrajPlanWorkbenchController::publishSharedData()
+    {
+        if(m_dataSource == nullptr) {
+            return;
+        }
+
+        robot_qt_viewer::PlanningDataSnapshot snapshot;
+        snapshot.modelObjectId = m_modelObjectId;
+        snapshot.modelPath = m_modelPath;
+        snapshot.modelName = QFileInfo(m_modelPath).completeBaseName();
+        snapshot.sceneScale = m_algorithmToSceneScale;
+        snapshot.sprayAxis=m_uvPlanning?4:m_generalData.trajData_.generationParams_.normalAxis;
+        snapshot.feedAxis=m_uvPlanning?2:m_generalData.trajData_.generationParams_.forwardAxis;
+        snapshot.trajectory.name = snapshot.modelName.toStdString();
+
+        if(!snapshot.hasModel()) { m_dataSource->clear(); return; }
+        if(m_uvPlanning) {
+            const auto& mesh=m_uvPipeline.getOptCutsResult();
+            const auto points=SprayTrajPlan::TrajectoryExporter::prepareExportTrajectory(mesh.mesh_vertices,mesh.mesh_faces,m_uvPipeline.getTrajectory(),m_uvParameters.trajectory_speed,m_uvParameters.spray_distance,m_uvParameters.arc_speed_loss_pct);
+            std::size_t previous=std::numeric_limits<std::size_t>::max();
+            for(const auto& source : points) {
+                if(source.segmentIndex!=previous) {
+                    spraytrajectory::SpraySegment segment; segment.passIndex=static_cast<int>(source.segmentIndex);
+                    segment.sprayEnabled=source.sprayEnabled; segment.processId="freeform";
+                    snapshot.trajectory.segments.push_back(std::move(segment)); previous=source.segmentIndex;
+                }
+                spraytrajectory::SprayPathPoint point;
+                point.tcpPose.linear()=source.orientation.toRotationMatrix(); point.tcpPose.translation()=source.position*m_algorithmToSceneScale;
+                point.time=source.time; point.velocity=source.velocity*m_algorithmToSceneScale; point.acceleration=source.acceleration*m_algorithmToSceneScale;
+                point.targetDistance=source.sprayDistance*m_algorithmToSceneScale;
+                point.targetNormal=-point.tcpPose.linear().col(2); point.sprayEnabled=source.sprayEnabled;
+                point.pointType=source.sprayEnabled?spraytrajectory::SprayPathPointType::Regular:spraytrajectory::SprayPathPointType::AirMove;
+                snapshot.trajectory.segments.back().points.push_back(std::move(point));
+            }
+        } else {
+            const auto& data=m_generalData.trajData_;
+            const auto& points=data.connectionData_.isConnected_ && !data.connectionData_.connectedTrajectory_.empty()
+                ? data.connectionData_.connectedTrajectory_ : data.trajectoryPoints_;
+            double elapsed=0;
+            for(std::size_t i=0;i<points.size();++i) {
+                const auto& source=points[i];
+                const bool newPass=i==0 || points[i-1].trajectory_index!=source.trajectory_index;
+                if(newPass) {
+                    spraytrajectory::SpraySegment segment; segment.passIndex=source.trajectory_index; segment.processId="freeform";
+                    snapshot.trajectory.segments.push_back(std::move(segment));
+                }
+                spraytrajectory::SprayPathPoint point; point.tcpPose.matrix()=source.pose; point.tcpPose.translation()*=m_algorithmToSceneScale;
+                point.velocity=(source.velocity>0?source.velocity:data.generationParams_.normalVelocity)*m_algorithmToSceneScale;
+                point.acceleration=source.acceleration*m_algorithmToSceneScale; point.targetDistance=source.spray_distance*m_algorithmToSceneScale;
+                point.sprayEnabled=true; point.workpieceRegionId=source.trajectory_index;
+                if(i>0) {
+                    const double sourceDt=source.timestamp-points[i-1].timestamp;
+                    const double travel=(source.pose.block<3,1>(0,3)-points[i-1].pose.block<3,1>(0,3)).norm()*m_algorithmToSceneScale;
+                    elapsed+=sourceDt>0 && !newPass ? sourceDt : travel/std::max(point.velocity,1.0e-9);
+                }
+                point.time=elapsed;
+                snapshot.trajectory.segments.back().points.push_back(std::move(point));
+            }
+        }
+        m_dataSource->publish(std::move(snapshot));
+    }
+
 
     SprayTrajPlan::TrajectoryParams FreeformTrajPlanWorkbenchController::uvTrajectoryParameters() const
     {

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 set(${TARGET_NAME}_RequiredLibsPublic
     SMRobotSpray::SprayFreeformTrajPlan
+    SMRobotSpray::SprayTrajectoryCore
     SMRobotWorkbenchFreeformTrajPlan::FreeformTrajPlanRender
     SMRobotWorkbenchCommon::RobotQtModulesShared
     Qt5::Widgets

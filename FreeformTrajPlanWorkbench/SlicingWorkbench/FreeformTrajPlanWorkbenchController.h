@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include "FreeformTrajPlanWorkbenchExport.h"
+#include "PlanningDataSource.h"
 #include "FreeformTrajPlanWorkbenchPanel.h"
 #include "FreeformTrajPlanRenderer.h"
 #include <SlicingTrajPlan/BurTrajPlan.h>
@@ -24,6 +25,7 @@ namespace smrobot::workbench::freeform
         FreeformTrajPlanWorkbenchController(FreeformTrajPlanWorkflowPanel& workflowPanel,
             FreeformTrajPlanParameterPanel& parameterPanel,
             robot_qt_viewer::RobotQtViewerDocumentContext& context,
+            robot_qt_viewer::PlanningDataSource* dataSource,
             FreeformTrajPlanPreviewUpdatedCallback previewUpdated,
             FreeformTrajPlanPreviewClearedCallback previewCleared,
             QObject* parent = nullptr);
@@ -58,9 +60,11 @@ namespace smrobot::workbench::freeform
         void showResult(bool success, const QString& message);
         SprayTrajPlan::TrajectoryParams uvTrajectoryParameters() const;
         void refreshUvTrajectoryOverlay();
+        void publishSharedData();
         FreeformTrajPlanWorkflowPanel& m_workflowPanel;
         FreeformTrajPlanParameterPanel& m_parameterPanel;
         robot_qt_viewer::RobotQtViewerDocumentContext& m_context;
+        robot_qt_viewer::PlanningDataSource* m_dataSource = nullptr;
         FreeformTrajPlanRenderer m_renderer;
         FreeformTrajPlanPreviewUpdatedCallback m_previewUpdated;
         FreeformTrajPlanPreviewClearedCallback m_previewCleared;

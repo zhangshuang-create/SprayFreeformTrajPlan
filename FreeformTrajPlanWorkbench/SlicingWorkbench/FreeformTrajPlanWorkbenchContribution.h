@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FreeformTrajPlanWorkbenchExport.h"
+#include "PlanningDataSource.h"
 #include "RobotQtViewerWorkbenchPackageRegistry.h"
 #include "RobotQtViewerWorkbenchContribution.h"
 
@@ -11,6 +12,7 @@
 namespace robot_qt_viewer
 {
     class RobotQtViewerDocumentContext;
+    class RobotQtViewerDocumentViewRegistry;
 
     inline constexpr const char* kFreeformTrajPlanWorkbenchId = "smrobot.mode.freeform-trajectory-planning";
 
@@ -21,6 +23,8 @@ namespace robot_qt_viewer
     {
         //! 观察指针，生命周期由外部维护，本结构体不拥有对象
         RobotQtViewerDocumentContext* documentContext = nullptr;
+        RobotQtViewerDocumentViewRegistry* documentViewRegistry = nullptr;
+        robot_qt_viewer::PlanningDataSource* dataSource = nullptr;
 
         std::function<void(QWidget* workflowPanel)> installLeftPanel;
         std::function<void(const QString& message, int timeoutMs)> showStatus;
