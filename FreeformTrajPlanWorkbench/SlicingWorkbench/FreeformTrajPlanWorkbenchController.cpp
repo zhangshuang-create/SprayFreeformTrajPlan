@@ -36,6 +36,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMenu>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1625,6 +1626,35 @@ namespace smrobot::workbench::freeform
             loadSelectedPlane();
             rebuildTable();
         };
+
+        table->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(table, &QWidget::customContextMenuRequested, dialog,
+            [this, dialog, table, state, selectAndLoad](const QPoint& position) {
+                const auto* item = table->itemAt(position);
+                if (!item || !table->item(item->row(), 0)) return;
+                const int index = table->item(item->row(), 0)->data(Qt::UserRole).toInt();
+                if (index < 0) return; // Physical boundary rows are read-only.
+                selectAndLoad(index);
+                QMenu menu(table);
+                auto* remove = menu.addAction(QStringLiteral("删除切片"));
+                if (menu.exec(table->viewport()->mapToGlobal(position)) != remove) return;
+                if (!m_plan.deleteCuttingPlane(m_generalData, index)) {
+                    showResult(false, QStringLiteral("删除切片失败：切片数据不一致，请重新切片。"));
+                    return;
+                }
+                clearOverlay(m_context.visualizationViewport(), QStringLiteral("connections"));
+                clearOverlay(m_context.visualizationViewport(), QStringLiteral("frameConfiguration"));
+                clearOverlay(m_context.visualizationViewport(), QStringLiteral("trajectoryFrames"));
+                if (m_previewCleared) m_previewCleared();
+                refreshSlicingOverlays();
+                publishSharedData();
+                if (m_generalData.slicingData_.cuttingPlanes_.empty()) {
+                    dialog->close();
+                } else {
+                    selectAndLoad(m_generalData.slicingData_.lastSelectedLayerIndex);
+                }
+                showResult(true, QStringLiteral("切片已删除，旧轨迹已清除，请重新生成轨迹。"));
+            });
 
         connect(table, &QTableWidget::currentCellChanged, dialog,
             [state, table, selectAndLoad](int row, int, int, int) {
