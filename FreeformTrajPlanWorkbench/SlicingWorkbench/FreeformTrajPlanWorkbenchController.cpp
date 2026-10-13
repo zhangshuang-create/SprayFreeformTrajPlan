@@ -744,12 +744,14 @@ namespace smrobot::workbench::freeform
         case spray_freeform_traj_plan::WorkflowAction::StartSlicing:
             success = m_plan.generateCuttingPlanes(m_generalData);
             if(success) {
-                const QString method = m_generalData.slicingData_.managedParams_.mode == ModelTrajPlan::SlicingMode::AA
-                    ? QStringLiteral("自适应") : QStringLiteral("等距");
+                const QString method = m_generalData.slicingData_.currentSliceResult_.isBoundarylessFallback
+                    ? QStringLiteral("非双边界 Z 向等距")
+                    : (m_generalData.slicingData_.managedParams_.mode == ModelTrajPlan::SlicingMode::AA
+                        ? QStringLiteral("自适应") : QStringLiteral("等距"));
                 message = QStringLiteral("%1切片已完成：生成 %2 个切片层。").arg(
                     method).arg(m_generalData.slicingData_.cuttingPlanes_.size());
             } else {
-                message = QStringLiteral("切片失败：模型顶点=%1，边界=%2，最小步距=%3 mm。")
+                message = QStringLiteral("切片失败：模型顶点=%1，边界=%2，切片层间距=%3 mm。")
                     .arg(m_generalData.modelDataManager_.mainModelData_.m_vertices.size() / 3)
                     .arg(m_generalData.processingState_.isBoundaryDetected ? QStringLiteral("已识别") : QStringLiteral("未识别"))
                     .arg(m_generalData.boundaryData_.minStep_);
@@ -764,7 +766,9 @@ namespace smrobot::workbench::freeform
                 m_generalData.trajData_.generationParams_.offsetDistance);
             message = success
                 ? QStringLiteral("轨迹已生成：%1 个轨迹点。").arg(m_generalData.trajData_.trajectoryPoints_.size())
-                : QStringLiteral("轨迹生成失败：请先完成切片，并确认至少有一个有效切片轮廓。");
+                : (m_generalData.slicingData_.currentSliceResult_.isBoundarylessFallback
+                    ? QStringLiteral("轨迹生成失败：请确认切片轮廓有效；轨迹数量至少为 2，支持奇偶数；0 按轨迹间距计算。")
+                    : QStringLiteral("轨迹生成失败：请先完成切片，并确认至少有一个有效切片轮廓。"));
             break;
         case spray_freeform_traj_plan::WorkflowAction::ConnectTrajectory:
             success = m_plan.connectTrajectoryPoints(m_generalData, ModelTrajPlan::ConnectionStrategy::BowPath);
