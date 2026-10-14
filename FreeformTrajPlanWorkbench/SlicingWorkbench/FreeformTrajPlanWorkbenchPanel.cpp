@@ -234,7 +234,9 @@ namespace smrobot::workbench::freeform
         m_minimumSpacing->setToolTip(QStringLiteral("非双边界模式：沿 Z 的切片间距；切片层数为正数时不使用此步距。"));
         m_largeEndOffset = makeSpinBox(slicingGroup, 0.0, 0.0);
         m_smallEndOffset = makeSpinBox(slicingGroup, 0.0, 0.0);
-        m_sprayDistance = makeSpinBox(slicingGroup, 1.0, 0.001);
+        m_sprayDistance = makeSpinBox(slicingGroup, 1.0, -100000.0);
+        m_sprayDistance->setToolTip(QStringLiteral(
+            "有符号的法向偏移距离：负值相对于正值向相反一侧偏移，绝对值为偏移距离（mm）。"));
         m_speed = makeSpinBox(slicingGroup, 0.0, 0.0, QStringLiteral(" mm/s"));
         m_trajectoryCount = new QSpinBox(slicingGroup);
         m_trajectoryCount->setRange(0, 100000);
