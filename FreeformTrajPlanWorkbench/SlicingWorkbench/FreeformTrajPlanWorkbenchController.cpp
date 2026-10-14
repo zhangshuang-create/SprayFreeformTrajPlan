@@ -597,9 +597,11 @@ namespace smrobot::workbench::freeform
                     tcp.p = m_tcpSettings.p;
                     tcp.r = m_tcpSettings.r;
                 }
-                showResult(ModelTrajPlan::TrajectoryExporter::exportFANUCProgram(
-                               m_generalData.trajData_.trajectoryPoints_, path.toStdString(), tcp),
-                    QStringLiteral("FANUC 程序导出失败。"));
+                const bool success = ModelTrajPlan::TrajectoryExporter::exportFANUCProgram(
+                    m_generalData.trajData_.trajectoryPoints_, path.toStdString(), tcp);
+                showResult(success, success
+                    ? QStringLiteral("FANUC 程序导出成功：%1").arg(path)
+                    : QStringLiteral("FANUC 程序导出失败。"));
             }
             return;
         case FreeformTrajPlanExportFormat::Abb:
@@ -619,17 +621,23 @@ namespace smrobot::workbench::freeform
                     tcp.q3 = m_tcpSettings.q3;
                     tcp.q4 = m_tcpSettings.q4;
                 }
-                showResult(ModelTrajPlan::TrajectoryExporter::exportABBProgram(
-                               m_generalData.trajData_.trajectoryPoints_, path.toStdString(),
-                               path.toStdString(), tcp),
-                    QStringLiteral("ABB 程序导出失败。"));
+                const bool success = ModelTrajPlan::TrajectoryExporter::exportABBProgram(
+                    m_generalData.trajData_.trajectoryPoints_, path.toStdString(),
+                    path.toStdString(), tcp);
+                showResult(success, success
+                    ? QStringLiteral("ABB 程序导出成功：%1").arg(path)
+                    : QStringLiteral("ABB 程序导出失败。"));
             }
             return;
         case FreeformTrajPlanExportFormat::Paq:
-            showResult(m_uvPlanning
+            {
+                const bool success = m_uvPlanning
                     ? m_uvPipeline.exportPaq(path.toStdString(), uvTrajectoryParameters())
-                    : m_plan.exportTrajectoryToFile(m_generalData, path.toStdString()),
-                QStringLiteral("PAQ 轨迹导出失败。"));
+                    : m_plan.exportTrajectoryToFile(m_generalData, path.toStdString());
+                showResult(success, success
+                    ? QStringLiteral("PAQ 轨迹导出成功：%1").arg(path)
+                    : QStringLiteral("PAQ 轨迹导出失败。"));
+            }
             return;
         }
     }
