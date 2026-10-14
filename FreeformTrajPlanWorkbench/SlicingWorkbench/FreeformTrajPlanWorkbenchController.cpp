@@ -401,6 +401,7 @@ namespace smrobot::workbench::freeform
     void FreeformTrajPlanWorkbenchController::handleEvent(const robot_qt_viewer::RobotQtViewerEvent& event)
     {
         if(event.kind == robot_qt_viewer::RobotQtViewerEventKind::ProjectOpened) {
+            for(auto* dialog : m_workflowPanel.findChildren<QDialog*>(QStringLiteral("slicingAdjustDialog"))) dialog->reject();
             if(auto* dialog = m_workflowPanel.findChild<QDialog*>(QStringLiteral("trajectoryFrameDialog"))) dialog->reject();
             if(!m_modelObjectId.isEmpty()) {
                 if(auto* viewport = m_context.visualizationViewport()) {
@@ -438,6 +439,7 @@ namespace smrobot::workbench::freeform
     }
     void FreeformTrajPlanWorkbenchController::importModel(const QString& path)
     {
+        for(auto* dialog : m_workflowPanel.findChildren<QDialog*>(QStringLiteral("slicingAdjustDialog"))) dialog->reject();
         if(auto* dialog = m_workflowPanel.findChild<QDialog*>(QStringLiteral("trajectoryFrameDialog"))) dialog->reject();
         if(path.isEmpty()) {
             showResult(false, QStringLiteral("请先选择曲面模型。"));
@@ -711,6 +713,11 @@ namespace smrobot::workbench::freeform
     void FreeformTrajPlanWorkbenchController::requestWorkflowAction(
         spray_freeform_traj_plan::WorkflowAction action)
     {
+        // Adjustment widgets refer to the current slice set. Retire them before
+        // any other workflow can replace, clear, or resample that data.
+        if(action != spray_freeform_traj_plan::WorkflowAction::AdjustSlicing) {
+            for(auto* dialog : m_workflowPanel.findChildren<QDialog*>(QStringLiteral("slicingAdjustDialog"))) dialog->reject();
+        }
         // A data-changing workflow invalidates the dialog's sampled preview.
         // Camera interaction does not enter this path and stays available.
         if(action != spray_freeform_traj_plan::WorkflowAction::ConfigureTrajectoryFrame) {
@@ -1398,7 +1405,16 @@ namespace smrobot::workbench::freeform
             return;
         }
 
+        for(auto* existing : m_workflowPanel.findChildren<QDialog*>(QStringLiteral("slicingAdjustDialog"))) {
+            if(existing->isVisible()) {
+                existing->raise();
+                existing->activateWindow();
+                return;
+            }
+        }
+
         auto* dialog = new QDialog(&m_workflowPanel);
+        dialog->setObjectName(QStringLiteral("slicingAdjustDialog"));
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         dialog->setWindowModality(Qt::NonModal);
         dialog->setWindowTitle(QStringLiteral("切片控制"));
@@ -1519,6 +1535,7 @@ namespace smrobot::workbench::freeform
             refreshSlicingOverlays();
         };
         const auto loadSelectedPlane = [this, state, tx, ty, tz, rx, ry, rz, targetZ]() {
+            if(state->selectedIndex < 0 || state->selectedIndex >= static_cast<int>(m_generalData.slicingData_.cuttingPlanes_.size())) return;
             const auto& plane = m_generalData.slicingData_.cuttingPlanes_[static_cast<std::size_t>(state->selectedIndex)];
             state->loadingValues = true;
             const QSignalBlocker blockTx(tx), blockTy(ty), blockTz(tz), blockRx(rx), blockRy(ry), blockRz(rz), blockTarget(targetZ);
@@ -1529,10 +1546,12 @@ namespace smrobot::workbench::freeform
             targetZ->setValue(plane.center.z() + plane.translation_z);
             state->loadingValues = false;
         };
-        const auto updateSelectedPlane = [this, state, tx, ty, tz, rx, ry, rz]() {
+        const auto updateSelectedPlane = [this, state, tx, ty, tz, rx, ry, rz, loadSelectedPlane]() {
             if(state->loadingValues) {
                 return;
             }
+            if(state->selectedIndex < 0 || state->selectedIndex >= static_cast<int>(m_generalData.slicingData_.cuttingPlanes_.size())) return;
+            const auto previousSlicing = m_generalData.slicingData_;
             auto& plane = m_generalData.slicingData_.cuttingPlanes_[static_cast<std::size_t>(state->selectedIndex)];
             plane.translation_x = tx->value() - plane.center.x();
             plane.translation_y = ty->value() - plane.center.y();
@@ -1540,7 +1559,10 @@ namespace smrobot::workbench::freeform
             plane.rotation_x = rx->value(); plane.rotation_y = ry->value(); plane.rotation_z = rz->value();
             m_generalData.slicingData_.slicingisupdata = true;
             if(!m_plan.updateSingleCuttingPlaneSize(m_generalData, state->selectedIndex)) {
-                showResult(false, QStringLiteral("切片层几何更新失败。"));
+                m_generalData.slicingData_ = previousSlicing;
+                loadSelectedPlane();
+                refreshSlicingOverlays();
+                showResult(false, QStringLiteral("切片层几何更新失败，已恢复上一次有效切片。请确认调整后的平面与模型相交。"));
                 return;
             }
             clearOverlay(m_context.visualizationViewport(), QStringLiteral("connections"));
@@ -1694,6 +1716,7 @@ namespace smrobot::workbench::freeform
         connect(increaseLayer, &QPushButton::clicked, dialog, [tz, layerStep]() { tz->setValue(tz->value() + layerStep->value()); });
         connect(setTarget, &QPushButton::clicked, dialog, [tz, targetZ]() { tz->setValue(targetZ->value()); });
         connect(resetTransform, &QPushButton::clicked, dialog, [this, state, tx, ty, tz, rx, ry, rz, updateSelectedPlane, rebuildTable]() {
+            if(state->selectedIndex < 0 || state->selectedIndex >= static_cast<int>(m_generalData.slicingData_.cuttingPlanes_.size())) return;
             const QSignalBlocker blockTx(tx), blockTy(ty), blockTz(tz), blockRx(rx), blockRy(ry), blockRz(rz);
             const auto& plane = m_generalData.slicingData_.cuttingPlanes_[static_cast<std::size_t>(state->selectedIndex)];
             tx->setValue(plane.center.x()); ty->setValue(plane.center.y()); tz->setValue(plane.center.z());
@@ -1706,13 +1729,19 @@ namespace smrobot::workbench::freeform
             [this, state, tz, loadSelectedPlane, rebuildTable, selectLayer]() {
                 auto& planes = m_generalData.slicingData_.cuttingPlanes_;
                 if(planes.size() < 2) return;
+                const auto previousSlicing = m_generalData.slicingData_;
                 double minZ = std::numeric_limits<double>::max(), maxZ = std::numeric_limits<double>::lowest();
                 for(const auto& plane : planes) { minZ = std::min(minZ, plane.center.z() + plane.translation_z); maxZ = std::max(maxZ, plane.center.z() + plane.translation_z); }
                 for(std::size_t index = 0; index < planes.size(); ++index) {
                     const double z = minZ + (maxZ - minZ) * static_cast<double>(index) / static_cast<double>(planes.size() - 1);
                     planes[index].translation_z = z - planes[index].center.z();
                     m_generalData.slicingData_.slicingisupdata = true;
-                    m_plan.updateSingleCuttingPlaneSize(m_generalData, static_cast<int>(index));
+                    if(!m_plan.updateSingleCuttingPlaneSize(m_generalData, static_cast<int>(index))) {
+                        m_generalData.slicingData_ = previousSlicing;
+                        selectLayer(); loadSelectedPlane(); rebuildTable();
+                        showResult(false, QStringLiteral("均匀分布更新失败，已恢复上一次有效切片。"));
+                        return;
+                    }
                 }
                 selectLayer(); loadSelectedPlane(); rebuildTable(); refreshSlicingOverlays();
             });
