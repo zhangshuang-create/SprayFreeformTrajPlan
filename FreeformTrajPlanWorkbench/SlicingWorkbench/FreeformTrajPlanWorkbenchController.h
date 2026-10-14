@@ -34,7 +34,7 @@ namespace smrobot::workbench::freeform
         void statusMessageRequested(const QString& message, int timeoutMs);
     private:
         void importModel(const QString& path);
-        void exportTrajectory(const QString& path, FreeformTrajPlanExportFormat format);
+        void exportTrajectory(const QString& path, FreeformTrajPlanExportFormat format, double interpolationInterval);
         void setPlanningMethod(bool uv);
         void setSlicingMethod(bool adaptive);
         void setParameters(double trajectorySpacingMm, double chordErrorTolerance,

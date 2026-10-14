@@ -1,0 +1,5 @@
+add_executable(FTTrajectoryExportSamplingTest main.cpp)
+target_link_libraries(FTTrajectoryExportSamplingTest PRIVATE SMRobotSpray::SprayFreeformTrajPlan)
+target_compile_features(FTTrajectoryExportSamplingTest PRIVATE cxx_std_17)
+set_target_properties(FTTrajectoryExportSamplingTest PROPERTIES FOLDER tests/SMRobotWorkbenchFreeformTrajPlan)
+add_test(NAME FreeformTrajectoryExportSampling COMMAND $<TARGET_FILE:FTTrajectoryExportSamplingTest>)

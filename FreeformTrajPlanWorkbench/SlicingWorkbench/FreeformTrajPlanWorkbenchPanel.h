@@ -18,7 +18,8 @@ namespace smrobot::workbench::freeform
     {
         Paq,
         Fanuc,
-        Abb
+        Abb,
+        Matrix
     };
 
     enum class FreeformTrajPlanTcpFormat
@@ -57,7 +58,7 @@ namespace smrobot::workbench::freeform
         void importModelRequested(const QString& path);
         void planningMethodRequested(bool uv);
         void slicingMethodRequested(bool adaptive);
-        void exportTrajectoryRequested(const QString& path, FreeformTrajPlanExportFormat format);
+        void exportTrajectoryRequested(const QString& path, FreeformTrajPlanExportFormat format, double interpolationInterval);
         void workflowActionRequested(spray_freeform_traj_plan::WorkflowAction action);
 
     private:

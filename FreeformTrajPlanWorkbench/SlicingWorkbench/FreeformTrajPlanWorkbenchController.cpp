@@ -1,4 +1,5 @@
 #include "FreeformTrajPlanWorkbenchController.h"
+#include "TrajectoryExportSampling.h"
 #include <UVTrajPlan/TrajectoryExporter.h>
 #include "FreeformTrajPlanWorkbenchPanel.h"
 #include "RobotQtViewerEvents.h"
@@ -578,8 +579,68 @@ namespace smrobot::workbench::freeform
     }
     void FreeformTrajPlanWorkbenchController::exportTrajectory(
         const QString& path,
-        FreeformTrajPlanExportFormat format)
+        FreeformTrajPlanExportFormat format, double interpolationInterval)
     {
+        if(m_uvPlanning && (format == FreeformTrajPlanExportFormat::Abb
+            || format == FreeformTrajPlanExportFormat::Fanuc)) {
+            showResult(false, QStringLiteral("机器人程序导出当前仅支持切片轨迹。"));
+            return;
+        }
+        auto exportPoints = m_generalData.trajData_.trajectoryPoints_;
+        const bool preparedExport = interpolationInterval > 0 || format == FreeformTrajPlanExportFormat::Matrix;
+        if(preparedExport) {
+            try {
+                if(m_uvPlanning) {
+                    exportPoints.clear();
+                    const auto& mesh = m_uvPipeline.getOptCutsResult();
+                    const auto uvPoints = SprayTrajPlan::TrajectoryExporter::prepareExportTrajectory(
+                        mesh.mesh_vertices, mesh.mesh_faces, m_uvPipeline.getTrajectory(),
+                        m_uvParameters.trajectory_speed, m_uvParameters.spray_distance,
+                        m_uvParameters.arc_speed_loss_pct);
+                    for(const auto& source : uvPoints) {
+                        ModelTrajPlan::TrajectoryPoint point;
+                        point.pose = Eigen::Matrix4d::Identity();
+                        point.pose.block<3,3>(0,0) = source.orientation.normalized().toRotationMatrix();
+                        point.pose.block<3,1>(0,3) = source.position;
+                        point.timestamp = source.time;
+                        point.velocity = source.velocity;
+                        point.acceleration = source.acceleration;
+                        point.spray_distance = source.sprayDistance;
+                        point.point_type = source.pointType;
+                        point.trajectory_index = static_cast<int>(source.segmentIndex);
+                        exportPoints.push_back(point);
+                    }
+                } else {
+                    // Same time calculation as the existing slicing PAQ exporter (mm and mm/s).
+                    double elapsed = 0.0;
+                    for(std::size_t i = 0; i < exportPoints.size(); ++i) {
+                        if(i > 0) {
+                            const auto& a = exportPoints[i-1]; const auto& b = exportPoints[i];
+                            const double distance = (b.pose.block<3,1>(0,3)-a.pose.block<3,1>(0,3)).norm();
+                            elapsed += distance > 1e-6
+                                ? distance / std::max((a.velocity+b.velocity)*0.5, 1e-6) : 1e-6;
+                        }
+                        exportPoints[i].timestamp = elapsed;
+                    }
+                }
+                if(exportPoints.empty()) throw std::runtime_error("No trajectory to export");
+                if(interpolationInterval > 0)
+                    exportPoints = resampleExportTrajectory(exportPoints, interpolationInterval);
+                if(format == FreeformTrajPlanExportFormat::Paq || format == FreeformTrajPlanExportFormat::Matrix) {
+                    QSaveFile file(path);
+                    const std::string data = serializeExportTrajectory(exportPoints, format == FreeformTrajPlanExportFormat::Matrix);
+                    const bool success = file.open(QIODevice::WriteOnly)
+                        && file.write(data.data(), static_cast<qint64>(data.size())) == static_cast<qint64>(data.size())
+                        && file.commit();
+                    showResult(success, success ? QStringLiteral("轨迹导出成功：%1").arg(path)
+                                                : QStringLiteral("轨迹导出失败：%1").arg(file.errorString()));
+                    return;
+                }
+            } catch(const std::exception& error) {
+                showResult(false, QStringLiteral("轨迹导出失败：%1").arg(QString::fromUtf8(error.what())));
+                return;
+            }
+        }
         switch(format) {
         case FreeformTrajPlanExportFormat::Fanuc:
             if(m_uvPlanning) {
@@ -598,7 +659,7 @@ namespace smrobot::workbench::freeform
                     tcp.r = m_tcpSettings.r;
                 }
                 const bool success = ModelTrajPlan::TrajectoryExporter::exportFANUCProgram(
-                    m_generalData.trajData_.trajectoryPoints_, path.toStdString(), tcp);
+                    exportPoints, path.toStdString(), tcp);
                 showResult(success, success
                     ? QStringLiteral("FANUC 程序导出成功：%1").arg(path)
                     : QStringLiteral("FANUC 程序导出失败。"));
@@ -622,13 +683,15 @@ namespace smrobot::workbench::freeform
                     tcp.q4 = m_tcpSettings.q4;
                 }
                 const bool success = ModelTrajPlan::TrajectoryExporter::exportABBProgram(
-                    m_generalData.trajData_.trajectoryPoints_, path.toStdString(),
+                    exportPoints, path.toStdString(),
                     path.toStdString(), tcp);
                 showResult(success, success
                     ? QStringLiteral("ABB 程序导出成功：%1").arg(path)
                     : QStringLiteral("ABB 程序导出失败。"));
             }
             return;
+        case FreeformTrajPlanExportFormat::Matrix:
+            return; // Written above using the prepared timestamps.
         case FreeformTrajPlanExportFormat::Paq:
             {
                 const bool success = m_uvPlanning
@@ -1121,7 +1184,7 @@ namespace smrobot::workbench::freeform
     {
         auto* dialog = new QDialog(&m_workflowPanel);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
-        dialog->setWindowTitle(QStringLiteral("轨迹转换"));
+        dialog->setWindowTitle(QStringLiteral("位姿转换"));
         dialog->setMinimumWidth(620);
         auto* layout = new QVBoxLayout(dialog);
         auto* targetGroup = new QGroupBox(QStringLiteral("转换对象"), dialog);
@@ -1218,7 +1281,7 @@ namespace smrobot::workbench::freeform
         connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, readMatrix, modelCheck, trajectoryCheck]() {
             QString error;
             if(!applyTrajectoryTransform(readMatrix(), modelCheck->isChecked(), trajectoryCheck->isChecked(), error)) { QMessageBox::warning(dialog, QStringLiteral("转换失败"), error); return; }
-            showResult(true, QStringLiteral("已应用轨迹转换；后续导出将使用转换后的轨迹。")); dialog->accept();
+            showResult(true, QStringLiteral("已应用位姿转换；后续导出将使用转换后的轨迹。")); dialog->accept();
         });
         connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
         dialog->show();

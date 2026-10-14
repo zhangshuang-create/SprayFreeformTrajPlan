@@ -1,5 +1,7 @@
 #include "FreeformTrajPlanWorkbenchPanel.h"
 
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -137,12 +139,13 @@ namespace smrobot::workbench::freeform
         auto* exportButton = new QPushButton(QStringLiteral("导出轨迹"), outputGroup);
         connect(exportButton, &QPushButton::clicked, this, [this]() {
             const QString paqFilter = QStringLiteral("PAQ Trajectory (*.txt)");
+            const QString matrixFilter = QStringLiteral("Pose Matrix + Timestamp (*.txt)");
             const QString abbFilter = QStringLiteral("ABB RAPID Module (*.mod)");
             const QString fanucFilter = QStringLiteral("FANUC LS Program (*.LS *.ls)");
             QFileDialog dialog(this, QStringLiteral("导出轨迹"));
             dialog.setAcceptMode(QFileDialog::AcceptSave);
             dialog.selectFile(QStringLiteral("freeform_trajectory_paq.txt"));
-            dialog.setNameFilters({ paqFilter, abbFilter, fanucFilter, QStringLiteral("All Files (*)") });
+            dialog.setNameFilters({ paqFilter, matrixFilter, abbFilter, fanucFilter, QStringLiteral("All Files (*)") });
             dialog.selectNameFilter(paqFilter);
             dialog.setDefaultSuffix(QStringLiteral("txt"));
             if(dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) {
@@ -153,7 +156,9 @@ namespace smrobot::workbench::freeform
             const QString selectedFilter = dialog.selectedNameFilter();
             FreeformTrajPlanExportFormat format = FreeformTrajPlanExportFormat::Paq;
             QString suffix = QStringLiteral("txt");
-            if(selectedFilter == abbFilter) {
+            if(selectedFilter == matrixFilter) {
+                format = FreeformTrajPlanExportFormat::Matrix;
+            } else if(selectedFilter == abbFilter) {
                 format = FreeformTrajPlanExportFormat::Abb;
                 suffix = QStringLiteral("mod");
             } else if(selectedFilter == fanucFilter) {
@@ -164,10 +169,29 @@ namespace smrobot::workbench::freeform
             if(!path.endsWith(extension, Qt::CaseInsensitive)) {
                 path += extension;
             }
-            emit exportTrajectoryRequested(path, format);
+            QDialog options(this);
+            options.setWindowTitle(QStringLiteral("轨迹导出设置"));
+            auto* form = new QFormLayout(&options);
+            auto* interpolate = new QCheckBox(QStringLiteral("按时间插值"), &options);
+            interpolate->setChecked(false);
+            auto* interval = new QDoubleSpinBox(&options);
+            interval->setDecimals(6);
+            interval->setRange(0.000001, 3600.0);
+            interval->setValue(0.005);
+            interval->setSuffix(QStringLiteral(" s"));
+            interval->setEnabled(false);
+            connect(interpolate, &QCheckBox::toggled, interval, &QWidget::setEnabled);
+            form->addRow(interpolate);
+            form->addRow(QStringLiteral("插值时间步长"), interval);
+            auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &options);
+            connect(buttons, &QDialogButtonBox::accepted, &options, &QDialog::accept);
+            connect(buttons, &QDialogButtonBox::rejected, &options, &QDialog::reject);
+            form->addRow(buttons);
+            if(options.exec() != QDialog::Accepted) return;
+            emit exportTrajectoryRequested(path, format, interpolate->isChecked() ? interval->value() : 0.0);
         });
         outputLayout->addWidget(exportButton);
-        addActionButton(*outputLayout, outputGroup, QStringLiteral("轨迹转换"),
+        addActionButton(*outputLayout, outputGroup, QStringLiteral("位姿转换"),
             spray_freeform_traj_plan::WorkflowAction::TransformTrajectory, *this);
         layout->addWidget(outputGroup);
 
