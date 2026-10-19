@@ -1,5 +1,8 @@
 #include "../../TrajectoryExportSampling.h"
 #include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <SlicingTrajPlan/TrajectoryExporter.h>
 #include <limits>
 
 using namespace smrobot::workbench::freeform;
@@ -27,7 +30,7 @@ int main()
         const Eigen::Matrix3d expected = Eigen::AngleAxisd(1.0, Eigen::Vector3d::UnitZ()).toRotationMatrix();
         require(sampled[2].pose.block<3,3>(0,0).isApprox(expected), "wrong SLERP");
         require(sampled[2].velocity == 20 && sampled[2].spray_distance == 75, "wrong scalar interpolation");
-        require(sampled[3].point_type == 1 && sampled.back().point_type == 2, "wrong discrete state");
+        require(sampled[3].point_type == 2 && sampled.back().point_type == 2, "wrong discrete state");
         const auto irregular = resampleExportTrajectory({a,b}, 0.3);
         require(irregular.size() == 5 && irregular.back().timestamp == 4.0, "endpoint missing");
         auto duplicate = a; duplicate.pose(0,3) = 20;
@@ -71,6 +74,48 @@ int main()
         }
         require(matrix.find("4.000000000") != std::string::npos, "wrong matrix precision");
         require(original[0].pose(0,3) == 0 && original.size() == 2, "input was mutated");
+        auto normal = a; normal.point_type = 0;
+        auto boundary = b; boundary.point_type = 1;
+        const auto tags = resampleExportTrajectory({normal,boundary}, 0.25);
+        require(tags[3].point_type == 0 && tags.back().point_type == 1, "boundary label leaked to interpolation span");
+        auto offGridBoundary = boundary; offGridBoundary.timestamp = 3.3;
+        const auto preserved = resampleExportTrajectory({normal,offGridBoundary,b}, 0.25);
+        require(std::any_of(preserved.begin(), preserved.end(), [](const TrajectoryPoint& p) {
+            return p.timestamp == 3.3 && p.point_type == 1;
+        }), "uniform interpolation dropped an exact boundary sample");
+        const auto temp = std::filesystem::temp_directory_path() / "rws_point_type_export_test";
+        std::filesystem::create_directories(temp);
+        const std::vector<TrajectoryPoint> typed{normal,boundary,b,normal};
+        const auto abb = (temp / "points.mod").string();
+        const auto fanuc = (temp / "points.ls").string();
+        const auto txt = (temp / "points.txt").string();
+        require(ModelTrajPlan::TrajectoryExporter::exportTrajectoryToFile(typed,txt), "TXT export failed");
+        require(ModelTrajPlan::TrajectoryExporter::exportABBProgram(typed,txt,abb), "ABB export failed");
+        require(ModelTrajPlan::TrajectoryExporter::exportFANUCProgram(typed,fanuc), "FANUC export failed");
+        auto read = [](const std::string& path) {
+            std::ifstream stream(path); return std::string(std::istreambuf_iterator<char>(stream), {});
+        };
+        const auto abbText = read(abb), fanucText = read(fanuc);
+        require(abbText.find("! Boundary point") != std::string::npos &&
+            abbText.find("! Transition offset point") != std::string::npos, "ABB annotations missing");
+        require(abbText.find("MoveJ p1, v10, fine") != std::string::npos &&
+            abbText.find("MoveL p2, v30, z10") != std::string::npos &&
+            abbText.find("MoveL p4, v10, fine") != std::string::npos,
+            "ABB first point must be joint motion, followed by linear motion");
+        require(fanucText.find("L P[2] 30mm/sec CNT100") != std::string::npos,
+            "FANUC subsequent points must remain linear motion");
+        require(abbText.find("MoveL p3, v30, z10") != std::string::npos,
+            "Transition offset point unexpectedly forces an ABB stop");
+        require(fanucText.find("3:  J P[1] 10% FINE") != std::string::npos &&
+            fanucText.find("4:  ! P[2] Boundary point") != std::string::npos &&
+            fanucText.find("6:  ! P[3] Transition offset point") != std::string::npos &&
+            fanucText.find("LINE_COUNT\t= 8;") != std::string::npos, "FANUC annotations or line numbers incorrect");
+        std::istringstream typedTxt(read(txt));
+        for(const auto& point : typed) {
+            double columns[12]; for(auto& value : columns) require(bool(typedTxt >> value), "missing TXT column");
+            require(columns[10] == point.point_type, "TXT point type incorrect");
+        }
+        std::filesystem::remove_all(temp);
         std::cout << "Trajectory export sampling checks passed\n";
         return 0;
     } catch(const std::exception& e) {

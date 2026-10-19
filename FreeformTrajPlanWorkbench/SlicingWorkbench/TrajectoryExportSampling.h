@@ -8,6 +8,7 @@
 #include <sstream>
 #include <iomanip>
 #include <locale>
+#include <algorithm>
 
 namespace smrobot::workbench::freeform
 {
@@ -70,7 +71,11 @@ namespace smrobot::workbench::freeform
             while(segment + 1 < points.size() && points[segment + 1].timestamp <= t) ++segment;
             const auto& a = points[segment]; const auto& b = points[segment + 1];
             const double u = (t - a.timestamp) / (b.timestamp - a.timestamp);
-            auto p = a; // Discrete process flags follow the left endpoint, switching at the exact boundary.
+            auto p = a;
+            // Boundary tags describe individual samples, not the entire outgoing span.
+            // Samples on the empty-run leg remain transitions; exact source samples keep their tag.
+            if(t != a.timestamp)
+                p.point_type = a.point_type == 2 || b.point_type == 2 ? 2 : 0;
             p.timestamp = t;
             p.pose = Eigen::Matrix4d::Identity();
             p.pose.block<3,1>(0,3) = (1-u)*a.pose.block<3,1>(0,3) + u*b.pose.block<3,1>(0,3);
@@ -91,6 +96,18 @@ namespace smrobot::workbench::freeform
             result.push_back(p);
         }
         result.push_back(points.back());
-        return result;
+        // Keep exact boundary/offset samples even when the uniform time grid misses them.
+        // Otherwise a robot export can lose the physical entry/exit target and its annotation.
+        std::vector<ModelTrajPlan::TrajectoryPoint> merged;
+        std::size_t sample = 0;
+        for(const auto& point : points) {
+            if(point.point_type != 1 && point.point_type != 2) continue;
+            while(sample < result.size() && result[sample].timestamp < point.timestamp)
+                merged.push_back(result[sample++]);
+            if(sample < result.size() && result[sample].timestamp == point.timestamp) ++sample;
+            merged.push_back(point);
+        }
+        merged.insert(merged.end(), result.begin() + sample, result.end());
+        return merged;
     }
 }

@@ -372,6 +372,8 @@ namespace smrobot::workbench::freeform
           m_previewUpdated(std::move(previewUpdated)), m_previewCleared(std::move(previewCleared))
     {
         QSettings settings;
+        m_generalData.trajData_.generationParams_.upperTransitionSmoothPose = settings.value("freeform/upperTransitionSmoothPose", false).toBool();
+        m_generalData.trajData_.generationParams_.lowerTransitionSmoothPose = settings.value("freeform/lowerTransitionSmoothPose", false).toBool();
         const int normal = settings.value("freeform/normalAxis", 4).toInt();
         const int forward = settings.value("freeform/forwardAxis", 0).toInt();
         if(ModelTrajPlan::validTrajectoryAxes(normal, forward)) {
@@ -971,8 +973,20 @@ namespace smrobot::workbench::freeform
         forward->setCurrentIndex(previous.forwardAxis);
         form->addRow(QStringLiteral("喷涂法向轴"), normal);
         form->addRow(QStringLiteral("前进参考轴（回程不翻转）"), forward);
+        auto* upperTransitionPose = new QComboBox(dialog);
+        auto* lowerTransitionPose = new QComboBox(dialog);
+        const QStringList transitionPoses = {
+            QStringLiteral("默认（前轨迹偏移）"), QStringLiteral("平滑姿态") };
+        upperTransitionPose->addItems(transitionPoses);
+        lowerTransitionPose->addItems(transitionPoses);
+        upperTransitionPose->setCurrentIndex(previous.upperTransitionSmoothPose ? 1 : 0);
+        lowerTransitionPose->setCurrentIndex(previous.lowerTransitionSmoothPose ? 1 : 0);
+        form->addRow(QStringLiteral("上边界过渡点姿态"), upperTransitionPose);
+        form->addRow(QStringLiteral("下边界过渡点姿态"), lowerTransitionPose);
+        upperTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹下边界点的完整姿态及前进方向进行偏移。下边界是离原点最近的一端。"));
+        lowerTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹上边界点的完整姿态及前进方向进行偏移。下边界是离原点最近的一端。"));
         layout->addLayout(form);
-        auto* explanation = new QLabel(QStringLiteral("正向沿当前法向/前进参考方向，负向相反。\nX 红、Y 绿、Z 蓝；第三轴自动按右手系确定。"), dialog);
+        auto* explanation = new QLabel(QStringLiteral("正向沿当前法向/前进参考方向，负向相反。\nX 红、Y 绿、Z 蓝；第三轴自动按右手系确定。\n下边界为离原点最近的一端。过渡点姿态与偏移方向独立设置，重新生成轨迹后生效。"), dialog);
         explanation->setWordWrap(true); layout->addWidget(explanation);
         auto* status = new QLabel(dialog); status->setWordWrap(true); layout->addWidget(status);
         auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
@@ -1012,7 +1026,7 @@ namespace smrobot::workbench::freeform
         connect(forward, qOverload<int>(&QComboBox::currentIndexChanged), dialog, updatePreview);
         connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
         connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-        connect(dialog, &QDialog::finished, this, [this, dialog, normal, forward, updatePreview](int result) {
+        connect(dialog, &QDialog::finished, this, [this, dialog, normal, forward, upperTransitionPose, lowerTransitionPose, updatePreview](int result) {
         dialog->setObjectName(QString());
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("frameConfiguration"));
         if(result != QDialog::Accepted) return;
@@ -1027,9 +1041,15 @@ namespace smrobot::workbench::freeform
         for(auto& point : trajectory.connectionData_.connectedTrajectory_) remap(point);
         for(auto& point : trajectory.trajectoryPointsbf_) remap(point.second);
         for(auto& point : trajectory.trajectoryPointsaf_) remap(point.second);
+        const bool transitionPoseChanged = trajectory.generationParams_.upperTransitionSmoothPose != (upperTransitionPose->currentIndex() == 1)
+            || trajectory.generationParams_.lowerTransitionSmoothPose != (lowerTransitionPose->currentIndex() == 1);
+        trajectory.generationParams_.upperTransitionSmoothPose = upperTransitionPose->currentIndex() == 1;
+        trajectory.generationParams_.lowerTransitionSmoothPose = lowerTransitionPose->currentIndex() == 1;
         trajectory.generationParams_.normalAxis = normal->currentIndex();
         trajectory.generationParams_.forwardAxis = forward->currentIndex();
         QSettings settings;
+        settings.setValue("freeform/upperTransitionSmoothPose", trajectory.generationParams_.upperTransitionSmoothPose);
+        settings.setValue("freeform/lowerTransitionSmoothPose", trajectory.generationParams_.lowerTransitionSmoothPose);
         settings.setValue("freeform/normalAxis", normal->currentIndex());
         settings.setValue("freeform/forwardAxis", forward->currentIndex());
         setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible, m_connectionsVisible, m_referenceLinesVisible);
@@ -1037,7 +1057,9 @@ namespace smrobot::workbench::freeform
         if(trajectory.trajectoryPoints_.empty()) updatePreview();
         m_uvPipeline.clearModel();
         publishSharedData();
-        showResult(true, QStringLiteral("姿态配置已保存，已有轨迹姿态已更新。"));
+        showResult(true, transitionPoseChanged
+            ? QStringLiteral("配置已保存，已有轨迹姿态已更新；请重新生成轨迹以应用过渡点姿态及偏移方向。")
+            : QStringLiteral("姿态配置已保存，已有轨迹姿态已更新。"));
         });
         updatePreview();
         dialog->show();
