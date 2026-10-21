@@ -98,15 +98,15 @@ int main()
         const auto abbText = read(abb), fanucText = read(fanuc);
         require(abbText.find("! Boundary point") != std::string::npos &&
             abbText.find("! Transition offset point") != std::string::npos, "ABB annotations missing");
-        require(abbText.find("MoveJ p1, v10, fine") != std::string::npos &&
-            abbText.find("MoveL p2, v30, z10") != std::string::npos &&
-            abbText.find("MoveL p4, v10, fine") != std::string::npos,
+        require(abbText.find("MoveJ p1, v10, z100") != std::string::npos &&
+            abbText.find("MoveL p2, v30, z100") != std::string::npos &&
+            abbText.find("MoveL p4, v10, z100") != std::string::npos,
             "ABB first point must be joint motion, followed by linear motion");
         require(fanucText.find("L P[2] 30mm/sec CNT100") != std::string::npos,
             "FANUC subsequent points must remain linear motion");
-        require(abbText.find("MoveL p3, v30, z10") != std::string::npos,
+        require(abbText.find("MoveL p3, v30, z100") != std::string::npos,
             "Transition offset point unexpectedly forces an ABB stop");
-        require(fanucText.find("3:  J P[1] 10% FINE") != std::string::npos &&
+        require(fanucText.find("3:  J P[1] 10% CNT100") != std::string::npos &&
             fanucText.find("4:  ! P[2] Boundary point") != std::string::npos &&
             fanucText.find("6:  ! P[3] Transition offset point") != std::string::npos &&
             fanucText.find("LINE_COUNT\t= 8;") != std::string::npos, "FANUC annotations or line numbers incorrect");
