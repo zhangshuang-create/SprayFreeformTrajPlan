@@ -373,7 +373,15 @@ namespace smrobot::workbench::freeform
     {
         QSettings settings;
         m_generalData.trajData_.generationParams_.upperTransitionSmoothPose = settings.value("freeform/upperTransitionSmoothPose", false).toBool();
+        m_generalData.trajData_.generationParams_.upperTransitionOppositeOffset = settings.value("freeform/upperTransitionOppositeOffset", false).toBool();
+        m_generalData.trajData_.generationParams_.upperTransitionNormalOffset = settings.value("freeform/upperTransitionNormalOffset", true).toBool();
+        m_generalData.trajData_.generationParams_.upperTransitionFollowSprayDistance = settings.value("freeform/upperTransitionFollowSprayDistance", true).toBool();
+        m_generalData.trajData_.generationParams_.upperTransitionSprayDistance = settings.value("freeform/upperTransitionSprayDistance", 1.0).toDouble();
         m_generalData.trajData_.generationParams_.lowerTransitionSmoothPose = settings.value("freeform/lowerTransitionSmoothPose", false).toBool();
+        m_generalData.trajData_.generationParams_.lowerTransitionOppositeOffset = settings.value("freeform/lowerTransitionOppositeOffset", false).toBool();
+        m_generalData.trajData_.generationParams_.lowerTransitionNormalOffset = settings.value("freeform/lowerTransitionNormalOffset", true).toBool();
+        m_generalData.trajData_.generationParams_.lowerTransitionFollowSprayDistance = settings.value("freeform/lowerTransitionFollowSprayDistance", true).toBool();
+        m_generalData.trajData_.generationParams_.lowerTransitionSprayDistance = settings.value("freeform/lowerTransitionSprayDistance", 1.0).toDouble();
         const int normal = settings.value("freeform/normalAxis", 4).toInt();
         const int forward = settings.value("freeform/forwardAxis", 0).toInt();
         if(ModelTrajPlan::validTrajectoryAxes(normal, forward)) {
@@ -976,15 +984,70 @@ namespace smrobot::workbench::freeform
         auto* upperTransitionPose = new QComboBox(dialog);
         auto* lowerTransitionPose = new QComboBox(dialog);
         const QStringList transitionPoses = {
-            QStringLiteral("默认（前轨迹偏移）"), QStringLiteral("平滑姿态") };
+            QStringLiteral("默认姿态"), QStringLiteral("平滑姿态") };
         upperTransitionPose->addItems(transitionPoses);
         lowerTransitionPose->addItems(transitionPoses);
         upperTransitionPose->setCurrentIndex(previous.upperTransitionSmoothPose ? 1 : 0);
         lowerTransitionPose->setCurrentIndex(previous.lowerTransitionSmoothPose ? 1 : 0);
         form->addRow(QStringLiteral("上边界过渡点姿态"), upperTransitionPose);
         form->addRow(QStringLiteral("下边界过渡点姿态"), lowerTransitionPose);
-        upperTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹下边界点的完整姿态及前进方向进行偏移。下边界是离原点最近的一端。"));
-        lowerTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹上边界点的完整姿态及前进方向进行偏移。下边界是离原点最近的一端。"));
+        upperTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹下边界点的完整姿态，前进方向偏移单独设置。下边界是离原点最近的一端。"));
+        lowerTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹上边界点的完整姿态，前进方向偏移单独设置。下边界是离原点最近的一端。"));
+        auto* upperTransitionOffset = new QComboBox(dialog);
+        auto* lowerTransitionOffset = new QComboBox(dialog);
+        const QStringList transitionOffsets = {
+            QStringLiteral("前轨迹偏移"), QStringLiteral("对端边界前进方向") };
+        upperTransitionOffset->addItems(transitionOffsets);
+        lowerTransitionOffset->addItems(transitionOffsets);
+        upperTransitionOffset->setCurrentIndex(previous.upperTransitionOppositeOffset ? 1 : 0);
+        lowerTransitionOffset->setCurrentIndex(previous.lowerTransitionOppositeOffset ? 1 : 0);
+        form->addRow(QStringLiteral("上边界过渡点偏移方向"), upperTransitionOffset);
+        form->addRow(QStringLiteral("下边界过渡点偏移方向"), lowerTransitionOffset);
+        upperTransitionOffset->setToolTip(QStringLiteral("只控制偏移位置：默认沿原轨迹方向偏移；对端方向使用同一条轨迹下边界点的前进方向。"));
+        lowerTransitionOffset->setToolTip(QStringLiteral("只控制偏移位置：默认沿原轨迹方向偏移；对端方向使用同一条轨迹上边界点的前进方向。"));
+        struct NormalOffsetControls {
+            QCheckBox* enabled;
+            QCheckBox* follow;
+            QDoubleSpinBox* distance;
+        };
+        const auto addNormalOffset = [this, dialog, form, previous](const QString& label,
+            bool enabled, bool follow, double distance) {
+            NormalOffsetControls controls { new QCheckBox(QStringLiteral("沿法向偏移"), dialog),
+                new QCheckBox(QStringLiteral("跟随喷涂距离"), dialog), new QDoubleSpinBox(dialog) };
+            controls.enabled->setChecked(enabled);
+            controls.follow->setChecked(follow);
+            controls.distance->setRange(0.0, 1000000.0);
+            controls.distance->setDecimals(3);
+            controls.distance->setSuffix(QStringLiteral(" mm"));
+            controls.distance->setValue(follow ? std::abs(previous.offsetDistance) : std::abs(distance));
+            controls.distance->setEnabled(enabled);
+            controls.follow->setEnabled(enabled);
+            controls.distance->setToolTip(QStringLiteral("沿最终姿态法向计算喷涂距离；手动修改后不再跟随全局距离。关闭偏移时实际距离为 0，保留输入值。"));
+            auto* row = new QWidget(dialog);
+            auto* rowLayout = new QHBoxLayout(row);
+            rowLayout->setContentsMargins(0, 0, 0, 0);
+            rowLayout->addWidget(controls.enabled);
+            rowLayout->addWidget(controls.follow);
+            rowLayout->addWidget(controls.distance);
+            form->addRow(label, row);
+            connect(controls.enabled, &QCheckBox::toggled, dialog, [controls](bool on) {
+                controls.follow->setEnabled(on);
+                controls.distance->setEnabled(on);
+            });
+            connect(controls.distance, qOverload<double>(&QDoubleSpinBox::valueChanged), dialog,
+                [controls](double) { controls.follow->setChecked(false); });
+            connect(controls.follow, &QCheckBox::toggled, dialog, [this, controls](bool on) {
+                if(on) {
+                    const QSignalBlocker blocker(controls.distance);
+                    controls.distance->setValue(std::abs(m_generalData.trajData_.generationParams_.offsetDistance));
+                }
+            });
+            return controls;
+        };
+        const auto upperNormal = addNormalOffset(QStringLiteral("上边界过渡点喷涂距离"),
+            previous.upperTransitionNormalOffset, previous.upperTransitionFollowSprayDistance, previous.upperTransitionSprayDistance);
+        const auto lowerNormal = addNormalOffset(QStringLiteral("下边界过渡点喷涂距离"),
+            previous.lowerTransitionNormalOffset, previous.lowerTransitionFollowSprayDistance, previous.lowerTransitionSprayDistance);
         layout->addLayout(form);
         auto* explanation = new QLabel(QStringLiteral("正向沿当前法向/前进参考方向，负向相反。\nX 红、Y 绿、Z 蓝；第三轴自动按右手系确定。\n下边界为离原点最近的一端。过渡点姿态与偏移方向独立设置，重新生成轨迹后生效。"), dialog);
         explanation->setWordWrap(true); layout->addWidget(explanation);
@@ -1026,7 +1089,7 @@ namespace smrobot::workbench::freeform
         connect(forward, qOverload<int>(&QComboBox::currentIndexChanged), dialog, updatePreview);
         connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
         connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-        connect(dialog, &QDialog::finished, this, [this, dialog, normal, forward, upperTransitionPose, lowerTransitionPose, updatePreview](int result) {
+        connect(dialog, &QDialog::finished, this, [this, dialog, normal, forward, upperTransitionPose, lowerTransitionPose, upperTransitionOffset, lowerTransitionOffset, upperNormal, lowerNormal, updatePreview](int result) {
         dialog->setObjectName(QString());
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("frameConfiguration"));
         if(result != QDialog::Accepted) return;
@@ -1042,14 +1105,38 @@ namespace smrobot::workbench::freeform
         for(auto& point : trajectory.trajectoryPointsbf_) remap(point.second);
         for(auto& point : trajectory.trajectoryPointsaf_) remap(point.second);
         const bool transitionPoseChanged = trajectory.generationParams_.upperTransitionSmoothPose != (upperTransitionPose->currentIndex() == 1)
-            || trajectory.generationParams_.lowerTransitionSmoothPose != (lowerTransitionPose->currentIndex() == 1);
+            || trajectory.generationParams_.lowerTransitionSmoothPose != (lowerTransitionPose->currentIndex() == 1)
+            || trajectory.generationParams_.upperTransitionOppositeOffset != (upperTransitionOffset->currentIndex() == 1)
+            || trajectory.generationParams_.lowerTransitionOppositeOffset != (lowerTransitionOffset->currentIndex() == 1)
+            || trajectory.generationParams_.upperTransitionNormalOffset != upperNormal.enabled->isChecked()
+            || trajectory.generationParams_.upperTransitionFollowSprayDistance != upperNormal.follow->isChecked()
+            || trajectory.generationParams_.upperTransitionSprayDistance != upperNormal.distance->value()
+            || trajectory.generationParams_.lowerTransitionNormalOffset != lowerNormal.enabled->isChecked()
+            || trajectory.generationParams_.lowerTransitionFollowSprayDistance != lowerNormal.follow->isChecked()
+            || trajectory.generationParams_.lowerTransitionSprayDistance != lowerNormal.distance->value();
         trajectory.generationParams_.upperTransitionSmoothPose = upperTransitionPose->currentIndex() == 1;
+        trajectory.generationParams_.upperTransitionOppositeOffset = upperTransitionOffset->currentIndex() == 1;
+        trajectory.generationParams_.upperTransitionNormalOffset = upperNormal.enabled->isChecked();
+        trajectory.generationParams_.upperTransitionFollowSprayDistance = upperNormal.follow->isChecked();
+        trajectory.generationParams_.upperTransitionSprayDistance = upperNormal.distance->value();
         trajectory.generationParams_.lowerTransitionSmoothPose = lowerTransitionPose->currentIndex() == 1;
+        trajectory.generationParams_.lowerTransitionOppositeOffset = lowerTransitionOffset->currentIndex() == 1;
+        trajectory.generationParams_.lowerTransitionNormalOffset = lowerNormal.enabled->isChecked();
+        trajectory.generationParams_.lowerTransitionFollowSprayDistance = lowerNormal.follow->isChecked();
+        trajectory.generationParams_.lowerTransitionSprayDistance = lowerNormal.distance->value();
         trajectory.generationParams_.normalAxis = normal->currentIndex();
         trajectory.generationParams_.forwardAxis = forward->currentIndex();
         QSettings settings;
         settings.setValue("freeform/upperTransitionSmoothPose", trajectory.generationParams_.upperTransitionSmoothPose);
+        settings.setValue("freeform/upperTransitionOppositeOffset", trajectory.generationParams_.upperTransitionOppositeOffset);
+        settings.setValue("freeform/upperTransitionNormalOffset", trajectory.generationParams_.upperTransitionNormalOffset);
+        settings.setValue("freeform/upperTransitionFollowSprayDistance", trajectory.generationParams_.upperTransitionFollowSprayDistance);
+        settings.setValue("freeform/upperTransitionSprayDistance", trajectory.generationParams_.upperTransitionSprayDistance);
         settings.setValue("freeform/lowerTransitionSmoothPose", trajectory.generationParams_.lowerTransitionSmoothPose);
+        settings.setValue("freeform/lowerTransitionOppositeOffset", trajectory.generationParams_.lowerTransitionOppositeOffset);
+        settings.setValue("freeform/lowerTransitionNormalOffset", trajectory.generationParams_.lowerTransitionNormalOffset);
+        settings.setValue("freeform/lowerTransitionFollowSprayDistance", trajectory.generationParams_.lowerTransitionFollowSprayDistance);
+        settings.setValue("freeform/lowerTransitionSprayDistance", trajectory.generationParams_.lowerTransitionSprayDistance);
         settings.setValue("freeform/normalAxis", normal->currentIndex());
         settings.setValue("freeform/forwardAxis", forward->currentIndex());
         setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible, m_connectionsVisible, m_referenceLinesVisible);
@@ -1058,7 +1145,7 @@ namespace smrobot::workbench::freeform
         m_uvPipeline.clearModel();
         publishSharedData();
         showResult(true, transitionPoseChanged
-            ? QStringLiteral("配置已保存，已有轨迹姿态已更新；请重新生成轨迹以应用过渡点姿态及偏移方向。")
+            ? QStringLiteral("配置已保存，已有轨迹姿态已更新；请重新生成轨迹以应用过渡点姿态、偏移方向及喷涂距离。")
             : QStringLiteral("姿态配置已保存，已有轨迹姿态已更新。"));
         });
         updatePreview();
