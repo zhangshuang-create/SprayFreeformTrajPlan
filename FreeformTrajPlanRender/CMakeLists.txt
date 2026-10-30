@@ -31,7 +31,6 @@ target_include_directories(${TARGET_NAME}
 target_link_libraries(${TARGET_NAME}
     PUBLIC
         SMRobotSpray::SprayFreeformTrajPlan
-        UVTrajPlan::TrajModule
 )
 
 set_target_properties(${TARGET_NAME} PROPERTIES
@@ -40,3 +39,8 @@ set_target_properties(${TARGET_NAME} PROPERTIES
     DEBUG_POSTFIX _shared_${CMAKE_DEBUG_POSTFIX}
     RELEASE_POSTFIX _shared_${CMAKE_RELEASE_POSTFIX}
 )
+
+if(BUILD_UV_TRAJ_PLAN)
+    target_link_libraries(${TARGET_NAME} PUBLIC UVTrajPlan::TrajModule)
+endif()
+target_compile_definitions(${TARGET_NAME} PUBLIC BUILD_UV_TRAJ_PLAN=$<BOOL:${BUILD_UV_TRAJ_PLAN}>)

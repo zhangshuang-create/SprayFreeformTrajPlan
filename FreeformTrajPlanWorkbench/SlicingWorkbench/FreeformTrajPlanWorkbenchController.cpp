@@ -1,6 +1,9 @@
 #include "FreeformTrajPlanWorkbenchController.h"
 #include "TrajectoryExportSampling.h"
+#if BUILD_UV_TRAJ_PLAN
 #include <UVTrajPlan/TrajectoryExporter.h>
+#endif
+
 #include "FreeformTrajPlanWorkbenchPanel.h"
 #include "RobotQtViewerEvents.h"
 #include "RobotQtViewerDocumentContext.h"
@@ -422,7 +425,11 @@ namespace smrobot::workbench::freeform
             m_plan.clear(m_generalData);
             m_modelObjectId.clear();
             m_modelPath.clear();
-            m_uvPipeline.clearModel();
+
+#if BUILD_UV_TRAJ_PLAN
+m_uvPipeline.clearModel();
+#endif
+
             m_uvPlanning=false;
             if(m_dataSource != nullptr) {
                 m_dataSource->clear();
@@ -439,6 +446,10 @@ namespace smrobot::workbench::freeform
     }
     void FreeformTrajPlanWorkbenchController::setPlanningMethod(bool uv)
     {
+#if !BUILD_UV_TRAJ_PLAN
+        if(uv) { showResult(false, QStringLiteral("UV 规划未启用，请使用切片规划。")); return; }
+#endif
+
         const auto method = uv ? spray_freeform_traj_plan::PlanningMethod::Uv
                                : spray_freeform_traj_plan::PlanningMethod::Slicing;
         m_uvPlanning = uv;
@@ -579,7 +590,7 @@ namespace smrobot::workbench::freeform
 
         showResult(true, QStringLiteral("曲面模型已导入并显示：%1").arg(m_modelObjectId));
     }
-        
+
     void FreeformTrajPlanWorkbenchController::setSlicingMethod(bool adaptive)
     {
         m_generalData.slicingData_.managedParams_.mode = adaptive
@@ -600,7 +611,9 @@ namespace smrobot::workbench::freeform
         const bool preparedExport = interpolationInterval > 0 || format == FreeformTrajPlanExportFormat::Matrix;
         if(preparedExport) {
             try {
-                if(m_uvPlanning) {
+
+#if BUILD_UV_TRAJ_PLAN
+if(m_uvPlanning) {
                     exportPoints.clear();
                     const auto& mesh = m_uvPipeline.getOptCutsResult();
                     const auto uvPoints = SprayTrajPlan::TrajectoryExporter::prepareExportTrajectory(
@@ -620,7 +633,9 @@ namespace smrobot::workbench::freeform
                         point.trajectory_index = static_cast<int>(source.segmentIndex);
                         exportPoints.push_back(point);
                     }
-                } else {
+                } else
+#endif
+ {
                     // Same time calculation as the existing slicing PAQ exporter (mm and mm/s).
                     double elapsed = 0.0;
                     for(std::size_t i = 0; i < exportPoints.size(); ++i) {
@@ -704,9 +719,13 @@ namespace smrobot::workbench::freeform
             return; // Written above using the prepared timestamps.
         case FreeformTrajPlanExportFormat::Paq:
             {
+#if BUILD_UV_TRAJ_PLAN
                 const bool success = m_uvPlanning
                     ? m_uvPipeline.exportPaq(path.toStdString(), uvTrajectoryParameters())
                     : m_plan.exportTrajectoryToFile(m_generalData, path.toStdString());
+#else
+                const bool success = m_plan.exportTrajectoryToFile(m_generalData, path.toStdString());
+#endif
                 showResult(success, success
                     ? QStringLiteral("PAQ 轨迹导出成功：%1").arg(path)
                     : QStringLiteral("PAQ 轨迹导出失败。"));
@@ -735,6 +754,7 @@ namespace smrobot::workbench::freeform
         double maximumJerkMmPerSecondCubed, double overtravelLength,
         double arcSpeedLossPercent, bool showUvSplitView)
     {
+#if BUILD_UV_TRAJ_PLAN
         m_uvParameters.target_spacing = targetSpacingMm;
         m_uvParameters.trajectory_speed = trajectorySpeedMmPerSecond;
         m_uvParameters.spray_distance = sprayDistanceMm;
@@ -743,6 +763,8 @@ namespace smrobot::workbench::freeform
         m_uvParameters.j_max = maximumJerkMmPerSecondCubed;
         m_uvParameters.arc_lock_guard_d = overtravelLength;
         m_uvParameters.arc_speed_loss_pct = arcSpeedLossPercent;
+
+#endif
         Q_UNUSED(showUvSplitView);
     }
 
@@ -865,6 +887,7 @@ namespace smrobot::workbench::freeform
             break;
         case spray_freeform_traj_plan::WorkflowAction::ExportTrajectory:
             success = false; message = QStringLiteral("请选择导出文件位置。"); break;
+#if BUILD_UV_TRAJ_PLAN
         case spray_freeform_traj_plan::WorkflowAction::StartUvMap:
             success = !m_modelPath.isEmpty() && m_uvPipeline.startUvMap(m_modelPath.toStdString(), uvTrajectoryParameters());
             message = success ? QStringLiteral("UV 展开已完成。") : QStringLiteral("UV 展开失败：请确认模型与 OptCuts 运行环境。 ");
@@ -879,6 +902,12 @@ namespace smrobot::workbench::freeform
             if(success) refreshUvTrajectoryOverlay();
             message = success ? QStringLiteral("UV 轨迹优化已完成。") : QStringLiteral("UV 轨迹优化失败：请先生成 UV 轨迹。 ");
             break;
+#else
+        case spray_freeform_traj_plan::WorkflowAction::StartUvMap:
+        case spray_freeform_traj_plan::WorkflowAction::GenerateUvTrajectory:
+        case spray_freeform_traj_plan::WorkflowAction::OptimizeUv:
+            success=false; message=QStringLiteral("UV 规划未启用，请使用切片规划。"); break;
+#endif
         case spray_freeform_traj_plan::WorkflowAction::AdjustSlicing:
             showSlicingAdjustDialog(); return;
         case spray_freeform_traj_plan::WorkflowAction::TransformTrajectory:
@@ -886,22 +915,38 @@ namespace smrobot::workbench::freeform
         case spray_freeform_traj_plan::WorkflowAction::ConfigureTrajectoryFrame:
             showTrajectoryFrameDialog(); return;
         case spray_freeform_traj_plan::WorkflowAction::ClearModelData:
-            m_plan.clear(m_generalData); m_uvPipeline.clearModel(); m_modelPath.clear();
+            m_plan.clear(m_generalData);
+#if BUILD_UV_TRAJ_PLAN
+m_uvPipeline.clearModel();
+#endif
+ m_modelPath.clear();
             message = QStringLiteral("模型数据已清除。"); break;
         case spray_freeform_traj_plan::WorkflowAction::ClearTrajectoryData:
             m_generalData.trajData_.trajectoryPoints_.clear();
             m_generalData.trajData_.connectionData_ = {};
             m_generalData.processingState_.isTrajectoryGenerated = false;
-            m_uvPipeline.clearTrajectory();
+
+#if BUILD_UV_TRAJ_PLAN
+m_uvPipeline.clearTrajectory();
+#endif
+
             message = QStringLiteral("轨迹数据已清除。"); break;
         case spray_freeform_traj_plan::WorkflowAction::ClearConnectionData:
-            m_generalData.trajData_.connectionData_ = {}; m_uvPipeline.clearConnection();
+            m_generalData.trajData_.connectionData_ = {};
+#if BUILD_UV_TRAJ_PLAN
+m_uvPipeline.clearConnection();
+#endif
+
             message = QStringLiteral("轨迹连线已清除。"); break;
         case spray_freeform_traj_plan::WorkflowAction::ClearOtherData:
             m_plan.clearCuttingPlanes(m_generalData); message = QStringLiteral("切片数据已清除。"); break;
         case spray_freeform_traj_plan::WorkflowAction::ClearAllData:
             m_plan.clear(m_generalData);
-            m_uvPipeline.clearModel();
+
+#if BUILD_UV_TRAJ_PLAN
+m_uvPipeline.clearModel();
+#endif
+
             m_modelPath.clear();
             message = QStringLiteral("全部规划数据已清除。");
             break;
@@ -1142,7 +1187,11 @@ namespace smrobot::workbench::freeform
         setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible, m_connectionsVisible, m_referenceLinesVisible);
         if(!trajectory.trajectoryPoints_.empty() && m_previewUpdated) m_previewUpdated(m_renderer.makePreview(trajectory.trajectoryPoints_));
         if(trajectory.trajectoryPoints_.empty()) updatePreview();
-        m_uvPipeline.clearModel();
+
+#if BUILD_UV_TRAJ_PLAN
+m_uvPipeline.clearModel();
+#endif
+
         publishSharedData();
         showResult(true, transitionPoseChanged
             ? QStringLiteral("配置已保存，已有轨迹姿态已更新；请重新生成轨迹以应用过渡点姿态、偏移方向及喷涂距离。")
@@ -1955,7 +2004,9 @@ namespace smrobot::workbench::freeform
         snapshot.trajectory.name = snapshot.modelName.toStdString();
 
         if(!snapshot.hasModel()) { m_dataSource->clear(); return; }
-        if(m_uvPlanning) {
+
+#if BUILD_UV_TRAJ_PLAN
+if(m_uvPlanning) {
             const auto& mesh=m_uvPipeline.getOptCutsResult();
             const auto points=SprayTrajPlan::TrajectoryExporter::prepareExportTrajectory(mesh.mesh_vertices,mesh.mesh_faces,m_uvPipeline.getTrajectory(),m_uvParameters.trajectory_speed,m_uvParameters.spray_distance,m_uvParameters.arc_speed_loss_pct);
             std::size_t previous=std::numeric_limits<std::size_t>::max();
@@ -1973,7 +2024,9 @@ namespace smrobot::workbench::freeform
                 point.pointType=source.sprayEnabled?spraytrajectory::SprayPathPointType::Regular:spraytrajectory::SprayPathPointType::AirMove;
                 snapshot.trajectory.segments.back().points.push_back(std::move(point));
             }
-        } else {
+        } else
+#endif
+ {
             const auto& data=m_generalData.trajData_;
             const auto& points=data.connectionData_.isConnected_ && !data.connectionData_.connectedTrajectory_.empty()
                 ? data.connectionData_.connectedTrajectory_ : data.trajectoryPoints_;
@@ -2002,18 +2055,24 @@ namespace smrobot::workbench::freeform
     }
 
 
+#if BUILD_UV_TRAJ_PLAN
     SprayTrajPlan::TrajectoryParams FreeformTrajPlanWorkbenchController::uvTrajectoryParameters() const
     {
         return m_uvParameters;
     }
 
+
+#endif
     void FreeformTrajPlanWorkbenchController::refreshUvTrajectoryOverlay()
     {
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("uvTrajectory"));
         if(!m_trajectoriesVisible) {
             return;
         }
+#if BUILD_UV_TRAJ_PLAN
         submitLineOverlay(m_context.visualizationViewport(), QStringLiteral("uvTrajectory"),
             m_renderer.makeUvTrajectoryPreview(m_uvPipeline.getTrajectory()), m_algorithmToSceneScale);
+#endif
+
     }
 }

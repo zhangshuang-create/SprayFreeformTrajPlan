@@ -61,7 +61,10 @@ namespace smrobot::workbench::freeform
         auto* planningMethodLayout = new QVBoxLayout(planningMethodGroup);
         auto* planningMethod = new QComboBox(planningMethodGroup);
         planningMethod->addItem(QStringLiteral("切片规划"), false);
+#if BUILD_UV_TRAJ_PLAN
         planningMethod->addItem(QStringLiteral("UV 规划"), true);
+#endif
+
         planningMethodLayout->addWidget(planningMethod);
         connect(planningMethod, qOverload<int>(&QComboBox::currentIndexChanged), this,
             [planningMethod, this](int index) {

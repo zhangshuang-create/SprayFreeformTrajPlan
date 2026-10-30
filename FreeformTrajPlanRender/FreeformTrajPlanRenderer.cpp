@@ -206,6 +206,7 @@ namespace smrobot::workbench::freeform
         return preview;
     }
 
+#if BUILD_UV_TRAJ_PLAN
     FreeformTrajPlanLinePreview FreeformTrajPlanRenderer::makeUvTrajectoryPreview(
         const std::vector<SprayTrajPlan::TrajectorySegment>& trajectory) const
     {
@@ -225,6 +226,8 @@ namespace smrobot::workbench::freeform
         return preview;
     }
 
+
+#endif
     FreeformTrajPlanLinePreview FreeformTrajPlanRenderer::makeBoundaryPreview(
         const spray_freeform_traj_plan::FreeformBoundaryResult& boundaries) const
     {

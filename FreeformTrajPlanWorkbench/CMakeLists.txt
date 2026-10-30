@@ -36,7 +36,6 @@ target_link_libraries(${TARGET_NAME}
     PUBLIC
         SMRobotSpray::SprayFreeformTrajPlan
         SMRobotSpray::SprayTrajectoryCore
-        UVTrajPlan::TrajModule
         SMRobotWorkbenchFreeformTrajPlan::FreeformTrajPlanRender
         SMRobotWorkbenchCommon::RobotQtModulesShared
         Qt5::Widgets
@@ -60,3 +59,8 @@ set_target_properties(${TARGET_NAME} PROPERTIES
 if(BUILD_TESTING)
     add_subdirectory(SlicingWorkbench/regression)
 endif()
+
+if(BUILD_UV_TRAJ_PLAN)
+    target_link_libraries(${TARGET_NAME} PUBLIC UVTrajPlan::TrajModule)
+endif()
+target_compile_definitions(${TARGET_NAME} PUBLIC BUILD_UV_TRAJ_PLAN=$<BOOL:${BUILD_UV_TRAJ_PLAN}>)

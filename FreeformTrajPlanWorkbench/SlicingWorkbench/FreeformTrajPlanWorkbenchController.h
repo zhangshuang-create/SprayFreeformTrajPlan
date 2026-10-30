@@ -7,7 +7,10 @@
 #include "FreeformTrajPlanRenderer.h"
 #include <SlicingTrajPlan/BurTrajPlan.h>
 #include <SlicingTrajPlan/GeneralData.h>
+#if BUILD_UV_TRAJ_PLAN
 #include <UVTrajPlan/TrajPlanPipeline.h>
+#endif
+
 
 #include <functional>
 
@@ -58,7 +61,10 @@ namespace smrobot::workbench::freeform
             bool transformModel, bool transformTrajectory, QString& errorMessage);
         void refreshSlicingOverlays();
         void showResult(bool success, const QString& message);
+#if BUILD_UV_TRAJ_PLAN
         SprayTrajPlan::TrajectoryParams uvTrajectoryParameters() const;
+#endif
+
         void refreshUvTrajectoryOverlay();
         void publishSharedData();
         FreeformTrajPlanWorkflowPanel& m_workflowPanel;
@@ -74,8 +80,11 @@ namespace smrobot::workbench::freeform
         ModelTrajPlan::BurTrajPlan m_plan;
         bool m_uvPlanning = false;
         QString m_modelPath;
+#if BUILD_UV_TRAJ_PLAN
         SprayTrajPlan::TrajectoryParams m_uvParameters;
         SprayTrajPlan::TrajPlanPipeline m_uvPipeline;
+#endif
+
         QString m_modelObjectId;
         // The original planning algorithms keep the STL's native coordinates
         // (normally millimetres).  The scene can display that same STL in metres.

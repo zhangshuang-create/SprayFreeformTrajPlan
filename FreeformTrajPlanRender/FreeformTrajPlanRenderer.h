@@ -2,7 +2,10 @@
 
 #include <SlicingTrajPlan/FreeformTrajPlanTypes.h>
 #include <SlicingTrajPlan/GeneralData.h>
+#if BUILD_UV_TRAJ_PLAN
 #include <UVTrajPlan/CommonDataTypes.h>
+#endif
+
 #include "FreeformTrajPlanRenderData.h"
 
 namespace smrobot::workbench::freeform
@@ -41,7 +44,10 @@ namespace smrobot::workbench::freeform
             const std::vector<ModelTrajPlan::ConnectionSegment>& connections) const;
         FreeformTrajPlanLinePreview makeReferenceLinePreview(
             const ModelTrajPlan::GeneralData& document) const;
+#if BUILD_UV_TRAJ_PLAN
         FreeformTrajPlanLinePreview makeUvTrajectoryPreview(
             const std::vector<SprayTrajPlan::TrajectorySegment>& trajectory) const;
+#endif
+
     };
 }
