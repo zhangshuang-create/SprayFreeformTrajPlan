@@ -14,6 +14,7 @@ class QStackedWidget;
 
 namespace smrobot::workbench::freeform
 {
+    class FreeformTrajPlanParameterPanel;
     enum class FreeformTrajPlanExportFormat
     {
         Paq,
@@ -52,6 +53,7 @@ namespace smrobot::workbench::freeform
         explicit FreeformTrajPlanWorkflowPanel(QWidget* parent = nullptr);
         void setModelPath(const QString& path);
         void setStatus(const QString& message, bool success);
+        void arrangeWith(FreeformTrajPlanParameterPanel& parameters);
         void setPlanningMethod(spray_freeform_traj_plan::PlanningMethod method);
 
     signals:
@@ -65,6 +67,11 @@ namespace smrobot::workbench::freeform
         QLineEdit* m_modelPath = nullptr;
         QLabel* m_status = nullptr;
         QStackedWidget* m_workflowStack = nullptr;
+        QWidget* m_slicingActions = nullptr;
+        QWidget* m_uvActions = nullptr;
+        QWidget* m_outputGroup = nullptr;
+        QWidget* m_clearGroup = nullptr;
+        bool m_arranged = false;
     };
 
     class FREEFORM_TRAJ_PLAN_WORKBENCH_API FreeformTrajPlanParameterPanel final : public QWidget
@@ -73,6 +80,7 @@ namespace smrobot::workbench::freeform
 
     public:
         explicit FreeformTrajPlanParameterPanel(QWidget* parent = nullptr);
+        void publishParameters();
         void setPlanningMethod(spray_freeform_traj_plan::PlanningMethod method);
 
     signals:
@@ -92,6 +100,11 @@ namespace smrobot::workbench::freeform
         void workflowActionRequested(spray_freeform_traj_plan::WorkflowAction action);
 
     private:
+        friend class FreeformTrajPlanWorkflowPanel;
+        QWidget* m_slicingPage = nullptr;
+        QWidget* m_uvPage = nullptr;
+        QWidget* m_visibilityGroup = nullptr;
+        QWidget* m_tcpGroup = nullptr;
         QDoubleSpinBox* m_trajectorySpacing = nullptr;
         QDoubleSpinBox* m_chordError = nullptr;
         QDoubleSpinBox* m_minimumSpacing = nullptr;

@@ -1,5 +1,6 @@
 #include "FreeformTrajPlanWorkbenchController.h"
 #include "TrajectoryExportSampling.h"
+#include "FreeformWorkpiecePlacement.h"
 #include <UVTrajPlan/TrajectoryExporter.h>
 #include "FreeformTrajPlanWorkbenchPanel.h"
 #include "RobotQtViewerEvents.h"
@@ -124,7 +125,7 @@ namespace
     {
         for(const QString& overlayId : { QStringLiteral("connections"), QStringLiteral("slices"),
                 QStringLiteral("slicePlanes"), QStringLiteral("sliceSurfaces"),
-                QStringLiteral("trajectoryFrames"), QStringLiteral("referenceLines"), QStringLiteral("frameConfiguration") }) {
+                QStringLiteral("trajectoryFrames"), QStringLiteral("referenceLines"), QStringLiteral("frameConfiguration"), QStringLiteral("uvTrajectory") }) {
             clearOverlay(viewport, overlayId);
         }
     }
@@ -371,6 +372,7 @@ namespace smrobot::workbench::freeform
           m_dataSource(dataSource),
           m_previewUpdated(std::move(previewUpdated)), m_previewCleared(std::move(previewCleared))
     {
+        workflowPanel.arrangeWith(parameterPanel);
         QSettings settings;
         m_generalData.trajData_.generationParams_.upperTransitionSmoothPose = settings.value("freeform/upperTransitionSmoothPose", false).toBool();
         m_generalData.trajData_.generationParams_.upperTransitionOppositeOffset = settings.value("freeform/upperTransitionOppositeOffset", false).toBool();
@@ -400,6 +402,7 @@ namespace smrobot::workbench::freeform
             this, &FreeformTrajPlanWorkbenchController::requestWorkflowAction);
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::parametersChanged,
             this, &FreeformTrajPlanWorkbenchController::setParameters);
+        parameterPanel.publishParameters();
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::uvParametersChanged,
             this, &FreeformTrajPlanWorkbenchController::setUvParameters);
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::visualizationVisibilityChanged,
@@ -409,6 +412,36 @@ namespace smrobot::workbench::freeform
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::workflowActionRequested,
             this, &FreeformTrajPlanWorkbenchController::requestWorkflowAction);
     }
+    bool FreeformTrajPlanWorkbenchController::activateWorkbench(QString& error)
+    {
+        if(!robot_qt_viewer::placeFreeformWorkpieces(m_context, true, error)) return false;
+        m_workbenchActive = true;
+        if(!m_modelObjectId.isEmpty()) {
+            if(auto* viewport = m_context.visualizationViewport())
+                viewport->setSceneObjectVisibilityOverride(m_modelObjectId, m_modelVisible);
+        }
+        if(!m_modelObjectId.isEmpty() && m_dataSource && m_dataSource->snapshot().hasTrajectory()) {
+            if(auto* viewport = m_context.visualizationViewport()) viewport->setCoatingTrajectoryPreview({}, false);
+        }
+        setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible,
+            m_connectionsVisible, m_referenceLinesVisible);
+        return true;
+    }
+
+    bool FreeformTrajPlanWorkbenchController::deactivateWorkbench(bool restoreUserPlacement, QString& error)
+    {
+        const auto* trajectory = m_dataSource && m_dataSource->snapshot().hasTrajectory() ? &m_dataSource->snapshot() : nullptr;
+        if(restoreUserPlacement && !robot_qt_viewer::placeFreeformWorkpieces(m_context, false, error, trajectory)) return false;
+        m_workbenchActive = false;
+        for(auto* dialog : m_workflowPanel.findChildren<QDialog*>()) dialog->reject();
+        clearAllOverlays(m_context.visualizationViewport());
+        if(auto* viewport = m_context.visualizationViewport()) {
+            if(!m_modelObjectId.isEmpty()) viewport->clearSceneObjectVisibilityOverride(m_modelObjectId);
+        }
+        if(m_previewCleared) m_previewCleared();
+        return true;
+    }
+
     void FreeformTrajPlanWorkbenchController::handleEvent(const robot_qt_viewer::RobotQtViewerEvent& event)
     {
         if(event.kind == robot_qt_viewer::RobotQtViewerEventKind::ProjectOpened) {
@@ -542,6 +575,11 @@ namespace smrobot::workbench::freeform
         }
 
         m_modelObjectId = importResult.entityId;
+        QString placementError;
+        if(m_workbenchActive && !robot_qt_viewer::placeFreeformWorkpieces(m_context, true, placementError)) {
+            showResult(false, placementError);
+            return;
+        }
         if(!m_modelVisible) {
             if(auto* viewport = m_context.visualizationViewport()) {
                 viewport->setSceneObjectVisibilityOverride(m_modelObjectId, false);
@@ -763,6 +801,7 @@ namespace smrobot::workbench::freeform
         m_connectionsVisible = connectionsVisible;
         m_referenceLinesVisible = referenceLinesVisible;
 
+        if(!m_workbenchActive) return;
         if(modelVisibilityChanged && !m_modelObjectId.isEmpty()) {
             auto* viewport = m_context.visualizationViewport();
             if(viewport == nullptr ||
@@ -1402,6 +1441,7 @@ namespace smrobot::workbench::freeform
 #if 0
     void FreeformTrajPlanWorkbenchController::refreshSlicingOverlays()
     {
+        if(!m_workbenchActive) return;
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("slicePlanes"));
         submitLineOverlay(m_context.visualizationViewport(), QStringLiteral("slices"),
             m_renderer.makeSlicingPreview(m_document.slicing()));
@@ -1556,6 +1596,7 @@ namespace smrobot::workbench::freeform
 
     void FreeformTrajPlanWorkbenchController::refreshSlicingOverlays()
     {
+        if(!m_workbenchActive) return;
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("slices"));
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("sliceSurfaces"));
         if(m_slicesVisible) {
@@ -1998,6 +2039,10 @@ namespace smrobot::workbench::freeform
                 snapshot.trajectory.segments.back().points.push_back(std::move(point));
             }
         }
+        if(m_workbenchActive && snapshot.hasTrajectory()) {
+            // The current planning path supersedes the previously retained program preview.
+            if(auto* viewport = m_context.visualizationViewport()) viewport->setCoatingTrajectoryPreview({}, false);
+        }
         m_dataSource->publish(std::move(snapshot));
     }
 
@@ -2009,6 +2054,7 @@ namespace smrobot::workbench::freeform
 
     void FreeformTrajPlanWorkbenchController::refreshUvTrajectoryOverlay()
     {
+        if(!m_workbenchActive) return;
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("uvTrajectory"));
         if(!m_trajectoriesVisible) {
             return;

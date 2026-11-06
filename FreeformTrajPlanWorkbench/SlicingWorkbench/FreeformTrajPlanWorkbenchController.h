@@ -29,6 +29,8 @@ namespace smrobot::workbench::freeform
             FreeformTrajPlanPreviewUpdatedCallback previewUpdated,
             FreeformTrajPlanPreviewClearedCallback previewCleared,
             QObject* parent = nullptr);
+        bool activateWorkbench(QString& error);
+        bool deactivateWorkbench(bool restoreUserPlacement, QString& error);
         void handleEvent(const robot_qt_viewer::RobotQtViewerEvent& event);
     signals:
         void statusMessageRequested(const QString& message, int timeoutMs);
@@ -72,6 +74,7 @@ namespace smrobot::workbench::freeform
         // its algorithm facade. The Workbench only converts it for display.
         ModelTrajPlan::GeneralData m_generalData;
         ModelTrajPlan::BurTrajPlan m_plan;
+        bool m_workbenchActive = false;
         bool m_uvPlanning = false;
         QString m_modelPath;
         SprayTrajPlan::TrajectoryParams m_uvParameters;

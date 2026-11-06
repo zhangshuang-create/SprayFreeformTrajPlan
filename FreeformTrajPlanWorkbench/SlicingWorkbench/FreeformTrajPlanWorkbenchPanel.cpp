@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFontMetrics>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -19,10 +20,21 @@
 
 namespace
 {
+    class PanelDoubleSpinBox final : public QDoubleSpinBox
+    {
+    public:
+        using QDoubleSpinBox::QDoubleSpinBox;
+        QSize sizeHint() const override {
+            auto size = QDoubleSpinBox::sizeHint();
+            size.setWidth(fontMetrics().horizontalAdvance(QStringLiteral("-000.000000") + suffix()) + 28);
+            return size;
+        }
+        QSize minimumSizeHint() const override { return sizeHint(); }
+    };
     QDoubleSpinBox* makeSpinBox(QWidget* parent, double value, double minimum,
         const QString& suffix = QStringLiteral(" mm"))
     {
-        auto* spinBox = new QDoubleSpinBox(parent);
+        auto* spinBox = new PanelDoubleSpinBox(parent);
         spinBox->setRange(minimum, 100000.0);
         spinBox->setDecimals(3);
         spinBox->setValue(value);
@@ -104,6 +116,7 @@ namespace smrobot::workbench::freeform
             });
         slicingLayout->addWidget(slicingMethodGroup);
         auto* slicingActions = new QGroupBox(QStringLiteral("切片流程"), slicingPage);
+        m_slicingActions=slicingActions;
         auto* slicingActionsLayout = new QVBoxLayout(slicingActions);
         addActionButton(*slicingActionsLayout, slicingActions, QStringLiteral("开始切片"),
             spray_freeform_traj_plan::WorkflowAction::StartSlicing, *this);
@@ -122,6 +135,7 @@ namespace smrobot::workbench::freeform
         auto* uvLayout = new QVBoxLayout(uvPage);
         uvLayout->setContentsMargins(0, 0, 0, 0);
         auto* uvActions = new QGroupBox(QStringLiteral("UV 规划流程"), uvPage);
+        m_uvActions=uvActions;
         auto* uvActionsLayout = new QVBoxLayout(uvActions);
         addActionButton(*uvActionsLayout, uvActions, QStringLiteral("开始 UV 图"),
             spray_freeform_traj_plan::WorkflowAction::StartUvMap, *this);
@@ -135,6 +149,7 @@ namespace smrobot::workbench::freeform
         layout->addWidget(m_workflowStack);
 
         auto* outputGroup = new QGroupBox(QStringLiteral("轨迹数据"), this);
+        m_outputGroup=outputGroup;
         auto* outputLayout = new QVBoxLayout(outputGroup);
         auto* exportButton = new QPushButton(QStringLiteral("导出轨迹"), outputGroup);
         connect(exportButton, &QPushButton::clicked, this, [this]() {
@@ -196,6 +211,7 @@ namespace smrobot::workbench::freeform
         layout->addWidget(outputGroup);
 
         auto* clearGroup = new QGroupBox(QStringLiteral("清除数据"), this);
+        m_clearGroup=clearGroup;
         auto* clearLayout = new QVBoxLayout(clearGroup);
         addActionButton(*clearLayout, clearGroup, QStringLiteral("模型数据"),
             spray_freeform_traj_plan::WorkflowAction::ClearModelData, *this);
@@ -220,6 +236,39 @@ namespace smrobot::workbench::freeform
         m_modelPath->setText(path);
     }
 
+    void FreeformTrajPlanWorkflowPanel::arrangeWith(FreeformTrajPlanParameterPanel& parameters)
+    {
+        if(m_arranged)return;
+        m_arranged=true;
+        const auto move=[](QWidget* widget,QVBoxLayout* target,int index) {
+            if(widget->parentWidget() && widget->parentWidget()->layout())
+                widget->parentWidget()->layout()->removeWidget(widget);
+            target->insertWidget(index,widget);
+        };
+        auto* left=qobject_cast<QVBoxLayout*>(layout());
+        auto* right=qobject_cast<QVBoxLayout*>(parameters.layout());
+        // Parameters first, followed by the actions for the selected method.
+        move(m_slicingActions,qobject_cast<QVBoxLayout*>(parameters.m_slicingPage->layout()),1);
+        move(m_uvActions,qobject_cast<QVBoxLayout*>(parameters.m_uvPage->layout()),1);
+        m_workflowStack->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+        move(m_outputGroup,right,right->count());
+        move(m_clearGroup,right,right->count());
+        right->addStretch(1);
+        for(auto* page:{parameters.m_slicingPage,parameters.m_uvPage}) {
+            auto* contents=qobject_cast<QVBoxLayout*>(page->layout());
+            for(int i=contents->count()-1;i>=0;--i)
+                if(contents->itemAt(i)->spacerItem())delete contents->takeAt(i);
+        }
+        parameters.m_parameterStack->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
+        const int beforeStatus=left->indexOf(m_status);
+        move(parameters.m_visibilityGroup,left,beforeStatus);
+        move(parameters.m_tcpGroup,left,beforeStatus+1);
+        // Pose conversion precedes export in the visible workflow.
+        auto* output=qobject_cast<QVBoxLayout*>(m_outputGroup->layout());
+        auto* conversion=output->takeAt(1);
+        output->insertWidget(0,conversion->widget());delete conversion;
+    }
+
     void FreeformTrajPlanWorkflowPanel::setStatus(const QString& message, bool success)
     {
         m_status->setText(message);
@@ -231,6 +280,14 @@ namespace smrobot::workbench::freeform
     {
         m_workflowStack->setCurrentIndex(
             method == spray_freeform_traj_plan::PlanningMethod::Uv ? 1 : 0);
+    }
+
+    void FreeformTrajPlanParameterPanel::publishParameters()
+    {
+        emit parametersChanged(m_trajectorySpacing->value(), m_chordError->value(),
+            m_minimumSpacing->value(), m_largeEndOffset->value(), m_smallEndOffset->value(),
+            m_sprayDistance->value(), m_speed->value(), m_trajectoryCount->value(),
+            m_maxSliceCount->value());
     }
 
     FreeformTrajPlanParameterPanel::FreeformTrajPlanParameterPanel(QWidget* parent)
@@ -246,6 +303,7 @@ namespace smrobot::workbench::freeform
 
         m_parameterStack = new QStackedWidget(this);
         auto* slicingPage = new QWidget(m_parameterStack);
+        m_slicingPage=slicingPage;
         auto* slicingLayout = new QVBoxLayout(slicingPage);
         slicingLayout->setContentsMargins(0, 0, 0, 0);
         auto* slicingGroup = new QGroupBox(QStringLiteral("切片规划参数"), slicingPage);
@@ -256,17 +314,24 @@ namespace smrobot::workbench::freeform
         m_chordError->setDecimals(6);
         m_minimumSpacing = makeSpinBox(slicingGroup, 50.0, 0.001);
         m_minimumSpacing->setToolTip(QStringLiteral("非双边界模式：沿 Z 的切片间距；切片层数为正数时不使用此步距。"));
-        m_largeEndOffset = makeSpinBox(slicingGroup, 0.0, 0.0);
-        m_smallEndOffset = makeSpinBox(slicingGroup, 0.0, 0.0);
-        m_sprayDistance = makeSpinBox(slicingGroup, 1.0, -100000.0);
+        m_largeEndOffset = makeSpinBox(slicingGroup, 100.0, 0.0);
+        m_largeEndOffset->setObjectName(QStringLiteral("freeformLargeEndOffset"));
+        m_smallEndOffset = makeSpinBox(slicingGroup, 100.0, 0.0);
+        m_smallEndOffset->setObjectName(QStringLiteral("freeformSmallEndOffset"));
+        m_sprayDistance = makeSpinBox(slicingGroup, 50.0, -100000.0);
+        m_sprayDistance->setObjectName(QStringLiteral("freeformSprayDistance"));
         m_sprayDistance->setToolTip(QStringLiteral(
             "有符号的法向偏移距离：负值相对于正值向相反一侧偏移，绝对值为偏移距离（mm）。"));
-        m_speed = makeSpinBox(slicingGroup, 0.0, 0.0, QStringLiteral(" mm/s"));
+        m_speed = makeSpinBox(slicingGroup, 500.0, 0.0, QStringLiteral(" mm/s"));
         m_trajectoryCount = new QSpinBox(slicingGroup);
         m_trajectoryCount->setRange(0, 100000);
+        m_trajectoryCount->setValue(200);
+        m_trajectoryCount->setObjectName(QStringLiteral("freeformTrajectoryCount"));
         m_trajectoryCount->setToolTip(QStringLiteral("0 按轨迹间距计算各层公共点数；正数覆盖间距，指定每层点数（至少 2，支持奇偶数）。"));
         m_maxSliceCount = new QSpinBox(slicingGroup);
         m_maxSliceCount->setRange(0, 100000);
+        m_maxSliceCount->setValue(8);
+        m_maxSliceCount->setObjectName(QStringLiteral("freeformSliceCount"));
         m_maxSliceCount->setToolTip(QStringLiteral("非双边界模式：0 按切片层间距计算 Z 向切片层数；正数指定层数并覆盖步距，1 层位于高度中点。双边界模式保持原切片层数限制。"));
         slicingForm->addRow(QStringLiteral("轨迹间距"), m_trajectorySpacing);
         slicingForm->addRow(QStringLiteral("弦误差容差"), m_chordError);
@@ -280,6 +345,7 @@ namespace smrobot::workbench::freeform
         slicingLayout->addWidget(slicingGroup);
 
         auto* visibilityGroup = new QGroupBox(QStringLiteral("可视化"), slicingPage);
+        m_visibilityGroup=visibilityGroup;
         auto* visibilityLayout = new QVBoxLayout(visibilityGroup);
         auto* modelVisible = new QCheckBox(QStringLiteral("显示模型"), visibilityGroup);
         auto* slicesVisible = new QCheckBox(QStringLiteral("显示切片"), visibilityGroup);
@@ -294,6 +360,7 @@ namespace smrobot::workbench::freeform
         slicingLayout->addWidget(visibilityGroup);
 
         auto* tcpGroup = new QGroupBox(QStringLiteral("导出 TCP"), slicingPage);
+        m_tcpGroup=tcpGroup;
         auto* tcpLayout = new QVBoxLayout(tcpGroup);
         m_tcpEnabled = new QCheckBox(QStringLiteral("在导出轨迹中附加 TCP"), tcpGroup);
         tcpLayout->addWidget(m_tcpEnabled);
@@ -364,6 +431,7 @@ namespace smrobot::workbench::freeform
         m_parameterStack->addWidget(slicingPage);
 
         auto* uvPage = new QWidget(m_parameterStack);
+        m_uvPage=uvPage;
         auto* uvLayout = new QVBoxLayout(uvPage);
         uvLayout->setContentsMargins(0, 0, 0, 0);
         auto* uvGroup = new QGroupBox(QStringLiteral("UV 规划参数"), uvPage);
@@ -397,10 +465,7 @@ namespace smrobot::workbench::freeform
         layout->addWidget(m_parameterStack);
 
         const auto publishSlicing = [this]() {
-            emit parametersChanged(m_trajectorySpacing->value(), m_chordError->value(),
-                m_minimumSpacing->value(), m_largeEndOffset->value(), m_smallEndOffset->value(),
-                m_sprayDistance->value(), m_speed->value(), m_trajectoryCount->value(),
-                m_maxSliceCount->value());
+            publishParameters();
         };
         for(QDoubleSpinBox* spinBox : { m_trajectorySpacing, m_chordError, m_minimumSpacing,
                 m_largeEndOffset, m_smallEndOffset, m_sprayDistance, m_speed }) {
