@@ -42,7 +42,9 @@ namespace smrobot::workbench::freeform
         void setParameters(double trajectorySpacingMm, double chordErrorTolerance,
             double minimumSpacingMm, double largeEndOffsetMm, double smallEndOffsetMm,
             double optimalSprayDistanceMm, double optimalSpeedMmPerSecond,
-            int trajectoryCount, int maxSliceCount);
+            int trajectoryCount, int maxSliceCount,
+            double lowerBoundarySprayDistanceMm, bool lowerBoundaryFollowGlobal,
+            double upperBoundarySprayDistanceMm, bool upperBoundaryFollowGlobal);
         void setUvParameters(double targetSpacingMm, double trajectorySpeedMmPerSecond,
             double sprayDistanceMm, double maximumSeamSprayDistanceMm,
             double maximumAccelerationMmPerSecondSquared,
