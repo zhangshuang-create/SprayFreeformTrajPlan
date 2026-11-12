@@ -87,9 +87,7 @@ namespace smrobot::workbench::freeform
         void parametersChanged(double trajectorySpacingMm, double chordErrorTolerance,
             double minimumSpacingMm, double largeEndOffsetMm, double smallEndOffsetMm,
             double optimalSprayDistanceMm, double optimalSpeedMmPerSecond,
-            int trajectoryCount, int maxSliceCount,
-            double lowerBoundarySprayDistanceMm, bool lowerBoundaryFollowGlobal,
-            double upperBoundarySprayDistanceMm, bool upperBoundaryFollowGlobal);
+            int trajectoryCount, int maxSliceCount);
         void uvParametersChanged(double targetSpacingMm, double trajectorySpeedMmPerSecond,
             double sprayDistanceMm, double maximumSeamSprayDistanceMm,
             double maximumAccelerationMmPerSecondSquared,
@@ -113,10 +111,6 @@ namespace smrobot::workbench::freeform
         QDoubleSpinBox* m_largeEndOffset = nullptr;
         QDoubleSpinBox* m_smallEndOffset = nullptr;
         QDoubleSpinBox* m_sprayDistance = nullptr;
-        QDoubleSpinBox* m_lowerBoundarySprayDistance = nullptr;
-        QDoubleSpinBox* m_upperBoundarySprayDistance = nullptr;
-        QCheckBox* m_lowerBoundaryFollowGlobal = nullptr;
-        QCheckBox* m_upperBoundaryFollowGlobal = nullptr;
         QDoubleSpinBox* m_speed = nullptr;
         QSpinBox* m_trajectoryCount = nullptr;
         QSpinBox* m_maxSliceCount = nullptr;

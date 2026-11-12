@@ -755,9 +755,7 @@ namespace smrobot::workbench::freeform
     void FreeformTrajPlanWorkbenchController::setParameters(double trajectorySpacingMm,
         double chordErrorTolerance, double minimumSpacingMm, double largeEndOffsetMm,
         double smallEndOffsetMm, double optimalSprayDistanceMm, double optimalSpeedMmPerSecond,
-        int trajectoryCount, int maxSliceCount, double lowerBoundarySprayDistanceMm,
-        bool lowerBoundaryFollowGlobal, double upperBoundarySprayDistanceMm,
-        bool upperBoundaryFollowGlobal)
+        int trajectoryCount, int maxSliceCount)
     {
         m_generalData.slicingData_.managedParams_.trajectorySpacing = trajectorySpacingMm;
         m_generalData.slicingData_.managedParams_.numTrajectories = trajectoryCount;
@@ -767,18 +765,6 @@ namespace smrobot::workbench::freeform
         m_generalData.trajData_.generationParams_.z1Offset = largeEndOffsetMm;
         m_generalData.trajData_.generationParams_.z2Offset = smallEndOffsetMm;
         m_generalData.trajData_.generationParams_.offsetDistance = optimalSprayDistanceMm;
-        // Keep the stored per-layer/boundary value synchronized while it is
-        // following the global distance. This makes unchecking "跟随全局"
-        // start from the current global value instead of an old default.
-        for(auto& plane : m_generalData.slicingData_.cuttingPlanes_) {
-            if(plane.followGlobalSprayDistance) plane.sprayDistance = optimalSprayDistanceMm;
-        }
-        m_generalData.boundaryData_.lowerBoundaryFollowGlobalSprayDistance_ = lowerBoundaryFollowGlobal;
-        m_generalData.boundaryData_.upperBoundaryFollowGlobalSprayDistance_ = upperBoundaryFollowGlobal;
-        m_generalData.boundaryData_.lowerBoundarySprayDistance_ = lowerBoundaryFollowGlobal
-            ? optimalSprayDistanceMm : lowerBoundarySprayDistanceMm;
-        m_generalData.boundaryData_.upperBoundarySprayDistance_ = upperBoundaryFollowGlobal
-            ? optimalSprayDistanceMm : upperBoundarySprayDistanceMm;
         m_generalData.trajData_.generationParams_.normalVelocity = optimalSpeedMmPerSecond;
     }
     void FreeformTrajPlanWorkbenchController::setUvParameters(double targetSpacingMm,
@@ -1069,10 +1055,10 @@ namespace smrobot::workbench::freeform
                 new QCheckBox(QStringLiteral("跟随喷涂距离"), dialog), new QDoubleSpinBox(dialog) };
             controls.enabled->setChecked(enabled);
             controls.follow->setChecked(follow);
-            controls.distance->setRange(-1000000.0, 1000000.0);
+            controls.distance->setRange(0.0, 1000000.0);
             controls.distance->setDecimals(3);
             controls.distance->setSuffix(QStringLiteral(" mm"));
-            controls.distance->setValue(follow ? previous.offsetDistance : distance);
+            controls.distance->setValue(follow ? std::abs(previous.offsetDistance) : std::abs(distance));
             controls.distance->setEnabled(enabled);
             controls.follow->setEnabled(enabled);
             controls.distance->setToolTip(QStringLiteral("沿最终姿态法向计算喷涂距离；手动修改后不再跟随全局距离。关闭偏移时实际距离为 0，保留输入值。"));
@@ -1092,7 +1078,7 @@ namespace smrobot::workbench::freeform
             connect(controls.follow, &QCheckBox::toggled, dialog, [this, controls](bool on) {
                 if(on) {
                     const QSignalBlocker blocker(controls.distance);
-                    controls.distance->setValue(m_generalData.trajData_.generationParams_.offsetDistance);
+                    controls.distance->setValue(std::abs(m_generalData.trajData_.generationParams_.offsetDistance));
                 }
             });
             return controls;
@@ -1658,14 +1644,11 @@ namespace smrobot::workbench::freeform
         auto* controlGroup = new QGroupBox(QStringLiteral("切片控制"), dialog);
         auto* controlLayout = new QVBoxLayout(controlGroup);
         auto* table = new QTableWidget(controlGroup);
-        table->setColumnCount(7);
+        table->setColumnCount(5);
         table->setHorizontalHeaderLabels({ QStringLiteral("层"), QStringLiteral("Z 位置"),
-            QStringLiteral("厚度"), QStringLiteral("轮廓点数"), QStringLiteral("轮廓长度 (mm)"),
-            QStringLiteral("喷涂距离 (mm)"), QStringLiteral("跟随全局") });
+            QStringLiteral("厚度"), QStringLiteral("轮廓点数"), QStringLiteral("轮廓长度 (mm)") });
         table->setSelectionBehavior(QAbstractItemView::SelectRows);
         table->setSelectionMode(QAbstractItemView::SingleSelection);
-        table->setEditTriggers(QAbstractItemView::DoubleClicked |
-            QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked);
         table->horizontalHeader()->setStretchLastSection(true);
         controlLayout->addWidget(table, 1);
 
@@ -1812,7 +1795,6 @@ namespace smrobot::workbench::freeform
             const QSignalBlocker block(table);
             table->clearContents();
             const auto& boundaries = m_generalData.boundaryData_;
-            const double globalDistance = m_generalData.trajData_.generationParams_.offsetDistance;
             const bool includeBounds = !m_generalData.slicingData_.currentSliceResult_.isBoundarylessFallback
                 && !boundaries.lowerBoundary_.points.empty() && !boundaries.upperBoundary_.points.empty();
             const int rowOffset = includeBounds ? 1 : 0;
@@ -1823,8 +1805,8 @@ namespace smrobot::workbench::freeform
                     length += (line.points[i].position - line.points[i - 1].position).norm();
                 return length;
             };
-            const auto addBoundaryRow = [table, arcLength, globalDistance](int row, const QString& label,
-                const ModelTrajPlan::BoundaryLine& line, bool followGlobal, double customDistance, int role) {
+            const auto addBoundaryRow = [table, arcLength](int row, const QString& label,
+                const ModelTrajPlan::BoundaryLine& line) {
                 double z = 0.0;
                 for (const auto& point : line.points) z += point.position.z();
                 z /= static_cast<double>(line.points.size());
@@ -1832,32 +1814,19 @@ namespace smrobot::workbench::freeform
                 // Include their closing edge exactly once in the perimeter.
                 const double length = arcLength(line) +
                     (line.points.front().position - line.points.back().position).norm();
-                const double effectiveDistance = followGlobal ? globalDistance : customDistance;
                 const QStringList values{label, QString::number(z, 'f', 3),
-                    QStringLiteral("-"), QStringLiteral("-"), QString::number(length, 'f', 3),
-                    QString::number(effectiveDistance, 'f', 3), QString()};
+                    QStringLiteral("-"), QStringLiteral("-"), QString::number(length, 'f', 3)};
                 for (int column = 0; column < values.size(); ++column) {
                     auto* item = new QTableWidgetItem(values[column]);
-                    item->setData(Qt::UserRole, role);
-                    if (column == 5) {
-                        item->setFlags(item->flags() | Qt::ItemIsEditable);
-                        item->setToolTip(QStringLiteral("边界点专用喷涂距离，允许正数、零和负数。"));
-                    } else if (column == 6) {
-                        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-                        item->setCheckState(followGlobal ? Qt::Checked : Qt::Unchecked);
-                        item->setToolTip(QStringLiteral("勾选后使用全局喷涂距离；取消后使用本行的独立距离。"));
-                    } else {
-                        item->setFlags(Qt::ItemIsEnabled); // Informational boundary data.
-                        item->setToolTip(QStringLiteral("模型边界；Z 位置为轮廓点的平均高度。"));
-                    }
+                    item->setFlags(Qt::ItemIsEnabled); // Informational row, not an editable slice.
+                    item->setData(Qt::UserRole, -1);
+                    item->setToolTip(QStringLiteral("模型边界，只读；Z 位置为轮廓点的平均高度。"));
                     table->setItem(row, column, item);
                 }
             };
             if (includeBounds) {
-                addBoundaryRow(0, QStringLiteral("下边界"), boundaries.lowerBoundary_,
-                    boundaries.lowerBoundaryFollowGlobalSprayDistance_, boundaries.lowerBoundarySprayDistance_, -2);
-                addBoundaryRow(static_cast<int>(planes.size()) + 1, QStringLiteral("上边界"), boundaries.upperBoundary_,
-                    boundaries.upperBoundaryFollowGlobalSprayDistance_, boundaries.upperBoundarySprayDistance_, -3);
+                addBoundaryRow(0, QStringLiteral("下边界"), boundaries.lowerBoundary_);
+                addBoundaryRow(static_cast<int>(planes.size()) + 1, QStringLiteral("上边界"), boundaries.upperBoundary_);
             }
             double minZ = std::numeric_limits<double>::max();
             double maxZ = std::numeric_limits<double>::lowest();
@@ -1887,17 +1856,6 @@ namespace smrobot::workbench::freeform
                     ? QString::number(arcLength(contours[index]), 'f', 3) : QStringLiteral("-"));
                 lengthItem->setFlags(lengthItem->flags() & ~Qt::ItemIsEditable);
                 table->setItem(static_cast<int>(index) + rowOffset, 4, lengthItem);
-                const double effectiveDistance = plane.followGlobalSprayDistance
-                    ? globalDistance : plane.sprayDistance;
-                auto* sprayDistanceItem = new QTableWidgetItem(QString::number(effectiveDistance, 'f', 3));
-                sprayDistanceItem->setFlags(sprayDistanceItem->flags() | Qt::ItemIsEditable);
-                table->setItem(static_cast<int>(index) + rowOffset, 5, sprayDistanceItem);
-                auto* followItem = new QTableWidgetItem();
-                followItem->setData(Qt::UserRole, static_cast<int>(index));
-                followItem->setFlags(followItem->flags() | Qt::ItemIsUserCheckable);
-                followItem->setCheckState(plane.followGlobalSprayDistance ? Qt::Checked : Qt::Unchecked);
-                followItem->setToolTip(QStringLiteral("勾选后使用全局喷涂距离；取消后使用本层独立距离。"));
-                table->setItem(static_cast<int>(index) + rowOffset, 6, followItem);
             }
             table->resizeColumnsToContents();
             table->selectRow(state->selectedIndex + rowOffset);
@@ -1942,68 +1900,17 @@ namespace smrobot::workbench::freeform
             });
 
         connect(table, &QTableWidget::currentCellChanged, dialog,
-            [state, table, selectLayer, loadSelectedPlane](int row, int, int, int) {
+            [state, table, selectAndLoad](int row, int, int, int) {
                 if (state->rebuilding || row < 0 || !table->item(row, 0)) return;
                 const int index = table->item(row, 0)->data(Qt::UserRole).toInt();
-                if (index >= 0) {
-                    // Do not rebuild the table on the first click. Replacing
-                    // the item here cancels Qt's second-click edit gesture.
-                    state->selectedIndex = index;
-                    selectLayer();
-                    loadSelectedPlane();
-                }
+                if (index >= 0) selectAndLoad(index);
             });
         connect(table, &QTableWidget::itemChanged, dialog,
-            [this, state, table, tz, updateSelectedPlane, rebuildTable](QTableWidgetItem* item) {
-                if(state->rebuilding || item == nullptr) return;
-                const auto* rowItem = table->item(item->row(), 0);
-                if (!rowItem) return;
-                const int index = rowItem->data(Qt::UserRole).toInt();
-                if (item->column() == 6) {
-                    const bool follow = item->checkState() == Qt::Checked;
-                    if (index >= 0) {
-                        auto& plane = m_generalData.slicingData_.cuttingPlanes_[static_cast<std::size_t>(index)];
-                        if (follow || plane.followGlobalSprayDistance)
-                            plane.sprayDistance = m_generalData.trajData_.generationParams_.offsetDistance;
-                        plane.followGlobalSprayDistance = follow;
-                    } else if (index == -2) {
-                        if (follow || m_generalData.boundaryData_.lowerBoundaryFollowGlobalSprayDistance_)
-                            m_generalData.boundaryData_.lowerBoundarySprayDistance_ =
-                                m_generalData.trajData_.generationParams_.offsetDistance;
-                        m_generalData.boundaryData_.lowerBoundaryFollowGlobalSprayDistance_ = follow;
-                    } else if (index == -3) {
-                        if (follow || m_generalData.boundaryData_.upperBoundaryFollowGlobalSprayDistance_)
-                            m_generalData.boundaryData_.upperBoundarySprayDistance_ =
-                                m_generalData.trajData_.generationParams_.offsetDistance;
-                        m_generalData.boundaryData_.upperBoundaryFollowGlobalSprayDistance_ = follow;
-                    }
-                    // Keep the value currently visible in the distance cell.
-                    // Checking the follow flag changes the source of future
-                    // updates; it must not rewrite the displayed value to a
-                    // stale zero during the same click.
-                    return;
-                }
-                if (item->column() == 5) {
-                    bool valid = false;
-                    const double distance = item->text().toDouble(&valid);
-                    if (valid && std::isfinite(distance)) {
-                        if (index >= 0) {
-                            m_generalData.slicingData_.cuttingPlanes_[static_cast<std::size_t>(index)].sprayDistance = distance;
-                            m_generalData.slicingData_.cuttingPlanes_[static_cast<std::size_t>(index)].followGlobalSprayDistance = false;
-                        } else if (index == -2) {
-                            m_generalData.boundaryData_.lowerBoundarySprayDistance_ = distance;
-                            m_generalData.boundaryData_.lowerBoundaryFollowGlobalSprayDistance_ = false;
-                        } else if (index == -3) {
-                            m_generalData.boundaryData_.upperBoundarySprayDistance_ = distance;
-                            m_generalData.boundaryData_.upperBoundaryFollowGlobalSprayDistance_ = false;
-                        }
-                    }
-                    rebuildTable();
-                    return;
-                }
-                if(item->column() != 1) return;
+            [state, table, tz, updateSelectedPlane, rebuildTable](QTableWidgetItem* item) {
+                if(state->rebuilding || item == nullptr || item->column() != 1) return;
                 bool valid = false; const double z = item->text().toDouble(&valid);
                 if(!valid) { rebuildTable(); return; }
+                const int index = table->item(item->row(), 0)->data(Qt::UserRole).toInt();
                 if (index < 0) { rebuildTable(); return; }
                 state->selectedIndex = index;
                 { const QSignalBlocker blocker(tz); tz->setValue(z); }

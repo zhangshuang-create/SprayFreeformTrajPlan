@@ -287,9 +287,7 @@ namespace smrobot::workbench::freeform
         emit parametersChanged(m_trajectorySpacing->value(), m_chordError->value(),
             m_minimumSpacing->value(), m_largeEndOffset->value(), m_smallEndOffset->value(),
             m_sprayDistance->value(), m_speed->value(), m_trajectoryCount->value(),
-            m_maxSliceCount->value(), m_lowerBoundarySprayDistance->value(),
-            m_lowerBoundaryFollowGlobal->isChecked(), m_upperBoundarySprayDistance->value(),
-            m_upperBoundaryFollowGlobal->isChecked());
+            m_maxSliceCount->value());
     }
 
     FreeformTrajPlanParameterPanel::FreeformTrajPlanParameterPanel(QWidget* parent)
@@ -322,14 +320,6 @@ namespace smrobot::workbench::freeform
         m_smallEndOffset->setObjectName(QStringLiteral("freeformSmallEndOffset"));
         m_sprayDistance = makeSpinBox(slicingGroup, 50.0, -100000.0);
         m_sprayDistance->setObjectName(QStringLiteral("freeformSprayDistance"));
-        m_lowerBoundarySprayDistance = makeSpinBox(slicingGroup, 50.0, -100000.0);
-        m_lowerBoundarySprayDistance->setObjectName(QStringLiteral("freeformLowerBoundarySprayDistance"));
-        m_upperBoundarySprayDistance = makeSpinBox(slicingGroup, 50.0, -100000.0);
-        m_upperBoundarySprayDistance->setObjectName(QStringLiteral("freeformUpperBoundarySprayDistance"));
-        m_lowerBoundaryFollowGlobal = new QCheckBox(QStringLiteral("跟随全局"), slicingGroup);
-        m_upperBoundaryFollowGlobal = new QCheckBox(QStringLiteral("跟随全局"), slicingGroup);
-        m_lowerBoundaryFollowGlobal->setChecked(true);
-        m_upperBoundaryFollowGlobal->setChecked(true);
         m_sprayDistance->setToolTip(QStringLiteral(
             "有符号的法向偏移距离：负值相对于正值向相反一侧偏移，绝对值为偏移距离（mm）。"));
         m_speed = makeSpinBox(slicingGroup, 500.0, 0.0, QStringLiteral(" mm/s"));
@@ -349,18 +339,6 @@ namespace smrobot::workbench::freeform
         slicingForm->addRow(QStringLiteral("大端偏置"), m_largeEndOffset);
         slicingForm->addRow(QStringLiteral("小端偏置"), m_smallEndOffset);
         slicingForm->addRow(QStringLiteral("最佳喷涂距离"), m_sprayDistance);
-        auto* lowerBoundaryRow = new QWidget(slicingGroup);
-        auto* lowerBoundaryLayout = new QHBoxLayout(lowerBoundaryRow);
-        lowerBoundaryLayout->setContentsMargins(0, 0, 0, 0);
-        lowerBoundaryLayout->addWidget(m_lowerBoundarySprayDistance);
-        lowerBoundaryLayout->addWidget(m_lowerBoundaryFollowGlobal);
-        slicingForm->addRow(QStringLiteral("\u4e0b\u8fb9\u754c\u55b7\u6d82\u8ddd\u79bb"), lowerBoundaryRow);
-        auto* upperBoundaryRow = new QWidget(slicingGroup);
-        auto* upperBoundaryLayout = new QHBoxLayout(upperBoundaryRow);
-        upperBoundaryLayout->setContentsMargins(0, 0, 0, 0);
-        upperBoundaryLayout->addWidget(m_upperBoundarySprayDistance);
-        upperBoundaryLayout->addWidget(m_upperBoundaryFollowGlobal);
-        slicingForm->addRow(QStringLiteral("\u4e0a\u8fb9\u754c\u55b7\u6d82\u8ddd\u79bb"), upperBoundaryRow);
         slicingForm->addRow(QStringLiteral("最佳速度"), m_speed);
         slicingForm->addRow(QStringLiteral("轨迹数量"), m_trajectoryCount);
         slicingForm->addRow(QStringLiteral("切片层数"), m_maxSliceCount);
@@ -490,14 +468,9 @@ namespace smrobot::workbench::freeform
             publishParameters();
         };
         for(QDoubleSpinBox* spinBox : { m_trajectorySpacing, m_chordError, m_minimumSpacing,
-                m_largeEndOffset, m_smallEndOffset, m_sprayDistance, m_speed,
-                m_lowerBoundarySprayDistance, m_upperBoundarySprayDistance }) {
+                m_largeEndOffset, m_smallEndOffset, m_sprayDistance, m_speed }) {
             connect(spinBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
                 [publishSlicing](double) { publishSlicing(); });
-        }
-        for(QCheckBox* checkBox : { m_lowerBoundaryFollowGlobal, m_upperBoundaryFollowGlobal }) {
-            connect(checkBox, &QCheckBox::toggled, this,
-                [publishSlicing](bool) { publishSlicing(); });
         }
         for(QSpinBox* spinBox : { m_trajectoryCount, m_maxSliceCount }) {
             connect(spinBox, qOverload<int>(&QSpinBox::valueChanged), this,
