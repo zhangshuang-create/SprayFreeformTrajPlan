@@ -12,6 +12,36 @@
 
 namespace smrobot::workbench::freeform
 {
+    // Quaternion export requires a proper rotation matrix.  Z is the spray
+    // surface normal and is the primary constraint; when raw X is not exactly
+    // tangent to Z, project X onto Z's tangent plane and derive Y by the
+    // right-hand rule.
+    inline Eigen::Matrix3d exportRotationPreservingZ(const Eigen::Matrix3d& raw)
+    {
+        Eigen::Vector3d x = raw.col(0);
+        Eigen::Vector3d z = raw.col(2);
+        if (!z.allFinite() || z.norm() <= 1e-10) z = Eigen::Vector3d::UnitZ();
+        z.normalize();
+        if (!x.allFinite() || x.norm() <= 1e-10) {
+            x = std::abs(z.z()) < 0.9
+                ? Eigen::Vector3d::UnitZ() : Eigen::Vector3d::UnitY();
+        }
+        x -= z * z.dot(x);
+        if (x.norm() <= 1e-10) {
+            x = std::abs(z.z()) < 0.9 ? Eigen::Vector3d::UnitZ() : Eigen::Vector3d::UnitY();
+            x -= z * z.dot(x);
+        }
+        if (x.norm() <= 1e-10) return Eigen::Matrix3d::Identity();
+        x.normalize();
+        Eigen::Vector3d y = z.cross(x);
+        if (y.norm() <= 1e-10) return Eigen::Matrix3d::Identity();
+        y.normalize();
+        x = y.cross(z).normalized();
+        Eigen::Matrix3d result;
+        result.col(0) = x; result.col(1) = y; result.col(2) = z;
+        return result;
+    }
+
     inline std::string serializeExportTrajectory(
         const std::vector<ModelTrajPlan::TrajectoryPoint>& exportPoints, bool matrixFormat)
     {
@@ -30,7 +60,8 @@ namespace smrobot::workbench::freeform
                 output << point.timestamp << "\n\n";
             } else {
                 const auto position = point.pose.block<3,1>(0,3);
-                const Eigen::Quaterniond q = Eigen::Quaterniond(point.pose.block<3,3>(0,0)).normalized();
+                const Eigen::Quaterniond q = Eigen::Quaterniond(
+                    exportRotationPreservingZ(point.pose.block<3,3>(0,0))).normalized();
                 output << position.x() << ' ' << position.y() << ' ' << position.z() << ' '
                     << q.w() << ' ' << q.x() << ' ' << q.y() << ' ' << q.z() << ' '
                     << point.velocity << ' ' << point.acceleration << ' ' << point.timestamp << ' '
@@ -79,7 +110,9 @@ namespace smrobot::workbench::freeform
             p.timestamp = t;
             p.pose = Eigen::Matrix4d::Identity();
             p.pose.block<3,1>(0,3) = (1-u)*a.pose.block<3,1>(0,3) + u*b.pose.block<3,1>(0,3);
-            Eigen::Quaterniond qa(a.pose.block<3,3>(0,0)), qb(b.pose.block<3,3>(0,0));
+            const Eigen::Matrix3d ra = exportRotationPreservingZ(a.pose.block<3,3>(0,0));
+            const Eigen::Matrix3d rb = exportRotationPreservingZ(b.pose.block<3,3>(0,0));
+            Eigen::Quaterniond qa(ra), qb(rb);
             qa.normalize(); qb.normalize();
             if(qa.dot(qb) < 0) qb.coeffs() *= -1;
             Eigen::Quaterniond orientation;
@@ -89,7 +122,9 @@ namespace smrobot::workbench::freeform
             } else {
                 orientation = qa.slerp(u, qb).normalized();
             }
-            p.pose.block<3,3>(0,0) = orientation.toRotationMatrix();
+            Eigen::Matrix3d interpolatedRotation = orientation.toRotationMatrix();
+            const Eigen::Vector3d xa = ra.col(0), xb = rb.col(0);
+            p.pose.block<3,3>(0,0) = interpolatedRotation;
             p.velocity = (1-u)*a.velocity + u*b.velocity;
             p.acceleration = (1-u)*a.acceleration + u*b.acceleration;
             p.spray_distance = (1-u)*a.spray_distance + u*b.spray_distance;
