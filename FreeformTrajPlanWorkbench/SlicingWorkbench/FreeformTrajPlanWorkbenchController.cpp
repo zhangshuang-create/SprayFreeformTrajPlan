@@ -1,5 +1,6 @@
 #include "FreeformTrajPlanWorkbenchController.h"
 #include "TrajectoryExportSampling.h"
+#include "FreeformWorkpiecePlacement.h"
 #if BUILD_UV_TRAJ_PLAN
 #include <UVTrajPlan/TrajectoryExporter.h>
 #endif
@@ -127,7 +128,7 @@ namespace
     {
         for(const QString& overlayId : { QStringLiteral("connections"), QStringLiteral("slices"),
                 QStringLiteral("slicePlanes"), QStringLiteral("sliceSurfaces"),
-                QStringLiteral("trajectoryFrames"), QStringLiteral("referenceLines"), QStringLiteral("frameConfiguration") }) {
+                QStringLiteral("trajectoryFrames"), QStringLiteral("referenceLines"), QStringLiteral("frameConfiguration"), QStringLiteral("uvTrajectory") }) {
             clearOverlay(viewport, overlayId);
         }
     }
@@ -374,6 +375,7 @@ namespace smrobot::workbench::freeform
           m_dataSource(dataSource),
           m_previewUpdated(std::move(previewUpdated)), m_previewCleared(std::move(previewCleared))
     {
+        workflowPanel.arrangeWith(parameterPanel);
         QSettings settings;
         m_generalData.trajData_.generationParams_.upperTransitionSmoothPose = settings.value("freeform/upperTransitionSmoothPose", false).toBool();
         m_generalData.trajData_.generationParams_.upperTransitionOppositeOffset = settings.value("freeform/upperTransitionOppositeOffset", false).toBool();
@@ -387,9 +389,17 @@ namespace smrobot::workbench::freeform
         m_generalData.trajData_.generationParams_.lowerTransitionSprayDistance = settings.value("freeform/lowerTransitionSprayDistance", 1.0).toDouble();
         const int normal = settings.value("freeform/normalAxis", 4).toInt();
         const int forward = settings.value("freeform/forwardAxis", 0).toInt();
+        const int normalDirectionMode = settings.value("freeform/normalDirectionMode", 0).toInt();
+        const int forwardDirectionMode = settings.value("freeform/forwardDirectionMode", 0).toInt();
+        const int boundaryNormalDirectionSign = settings.value("freeform/boundaryNormalDirectionSign", 1).toInt();
         if(ModelTrajPlan::validTrajectoryAxes(normal, forward)) {
             m_generalData.trajData_.generationParams_.normalAxis = normal;
             m_generalData.trajData_.generationParams_.forwardAxis = forward;
+            m_generalData.trajData_.generationParams_.normalDirectionMode = std::clamp(normalDirectionMode, 0, 2);
+            m_generalData.trajData_.generationParams_.forwardDirectionMode =
+                std::clamp(forwardDirectionMode, 0, 2);
+            m_generalData.trajData_.generationParams_.boundaryNormalDirectionSign =
+                boundaryNormalDirectionSign < 0 ? -1 : 1;
         }
         connect(&workflowPanel, &FreeformTrajPlanWorkflowPanel::importModelRequested,
             this, &FreeformTrajPlanWorkbenchController::importModel);
@@ -403,6 +413,7 @@ namespace smrobot::workbench::freeform
             this, &FreeformTrajPlanWorkbenchController::requestWorkflowAction);
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::parametersChanged,
             this, &FreeformTrajPlanWorkbenchController::setParameters);
+        parameterPanel.publishParameters();
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::uvParametersChanged,
             this, &FreeformTrajPlanWorkbenchController::setUvParameters);
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::visualizationVisibilityChanged,
@@ -412,6 +423,36 @@ namespace smrobot::workbench::freeform
         connect(&parameterPanel, &FreeformTrajPlanParameterPanel::workflowActionRequested,
             this, &FreeformTrajPlanWorkbenchController::requestWorkflowAction);
     }
+    bool FreeformTrajPlanWorkbenchController::activateWorkbench(QString& error)
+    {
+        if(!robot_qt_viewer::placeFreeformWorkpieces(m_context, true, error)) return false;
+        m_workbenchActive = true;
+        if(!m_modelObjectId.isEmpty()) {
+            if(auto* viewport = m_context.visualizationViewport())
+                viewport->setSceneObjectVisibilityOverride(m_modelObjectId, m_modelVisible);
+        }
+        if(!m_modelObjectId.isEmpty() && m_dataSource && m_dataSource->snapshot().hasTrajectory()) {
+            if(auto* viewport = m_context.visualizationViewport()) viewport->setCoatingTrajectoryPreview({}, false);
+        }
+        setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible,
+            m_connectionsVisible, m_referenceLinesVisible);
+        return true;
+    }
+
+    bool FreeformTrajPlanWorkbenchController::deactivateWorkbench(bool restoreUserPlacement, QString& error)
+    {
+        const auto* trajectory = m_dataSource && m_dataSource->snapshot().hasTrajectory() ? &m_dataSource->snapshot() : nullptr;
+        if(restoreUserPlacement && !robot_qt_viewer::placeFreeformWorkpieces(m_context, false, error, trajectory)) return false;
+        m_workbenchActive = false;
+        for(auto* dialog : m_workflowPanel.findChildren<QDialog*>()) dialog->reject();
+        clearAllOverlays(m_context.visualizationViewport());
+        if(auto* viewport = m_context.visualizationViewport()) {
+            if(!m_modelObjectId.isEmpty()) viewport->clearSceneObjectVisibilityOverride(m_modelObjectId);
+        }
+        if(m_previewCleared) m_previewCleared();
+        return true;
+    }
+
     void FreeformTrajPlanWorkbenchController::handleEvent(const robot_qt_viewer::RobotQtViewerEvent& event)
     {
         if(event.kind == robot_qt_viewer::RobotQtViewerEventKind::ProjectOpened) {
@@ -553,6 +594,11 @@ m_uvPipeline.clearModel();
         }
 
         m_modelObjectId = importResult.entityId;
+        QString placementError;
+        if(m_workbenchActive && !robot_qt_viewer::placeFreeformWorkpieces(m_context, true, placementError)) {
+            showResult(false, placementError);
+            return;
+        }
         if(!m_modelVisible) {
             if(auto* viewport = m_context.visualizationViewport()) {
                 viewport->setSceneObjectVisibilityOverride(m_modelObjectId, false);
@@ -785,6 +831,7 @@ if(m_uvPlanning) {
         m_connectionsVisible = connectionsVisible;
         m_referenceLinesVisible = referenceLinesVisible;
 
+        if(!m_workbenchActive) return;
         if(modelVisibilityChanged && !m_modelObjectId.isEmpty()) {
             auto* viewport = m_context.visualizationViewport();
             if(viewport == nullptr ||
@@ -1019,13 +1066,33 @@ m_uvPipeline.clearModel();
         auto* form = new QFormLayout();
         auto* normal = new QComboBox(dialog);
         auto* forward = new QComboBox(dialog);
+        auto* normalDirectionMode = new QComboBox(dialog);
+        auto* forwardDirectionMode = new QComboBox(dialog);
         const QStringList axes = { "X+", "X-", "Y+", "Y-", "Z+", "Z-" };
         normal->addItems(axes); forward->addItems(axes);
+        normalDirectionMode->addItem(QStringLiteral("控制点表面法向"));
+        normalDirectionMode->addItem(QStringLiteral("固定法向：投影到水平面"));
+        normalDirectionMode->addItem(QStringLiteral("平均法向"));
+        forwardDirectionMode->addItem(QStringLiteral("逐段方向"));
+        forwardDirectionMode->addItem(QStringLiteral("整条轨迹平均方向"));
+        forwardDirectionMode->addItem(QStringLiteral("垂直于下边界"));
+        auto* boundaryNormalDirectionSign = new QComboBox(dialog);
+        boundaryNormalDirectionSign->addItem(QStringLiteral("正：指向上边界"), 1);
+        boundaryNormalDirectionSign->addItem(QStringLiteral("负：指向下边界"), -1);
         const auto previous = m_generalData.trajData_.generationParams_;
         normal->setCurrentIndex(previous.normalAxis);
         forward->setCurrentIndex(previous.forwardAxis);
+        normalDirectionMode->setCurrentIndex(std::clamp(previous.normalDirectionMode, 0, 2));
+        forwardDirectionMode->setCurrentIndex(std::clamp(previous.forwardDirectionMode, 0, 2));
+        boundaryNormalDirectionSign->setCurrentIndex(previous.boundaryNormalDirectionSign < 0 ? 1 : 0);
         form->addRow(QStringLiteral("喷涂法向轴"), normal);
+        form->addRow(QStringLiteral("法向计算方式"), normalDirectionMode);
         form->addRow(QStringLiteral("前进参考轴（回程不翻转）"), forward);
+        form->addRow(QStringLiteral("前进方向平滑方式"), forwardDirectionMode);
+        form->addRow(QStringLiteral("下边界垂直方向"), boundaryNormalDirectionSign);
+        boundaryNormalDirectionSign->setEnabled(forwardDirectionMode->currentIndex() == 2);
+        connect(forwardDirectionMode, qOverload<int>(&QComboBox::currentIndexChanged), dialog,
+            [boundaryNormalDirectionSign](int index) { boundaryNormalDirectionSign->setEnabled(index == 2); });
         auto* upperTransitionPose = new QComboBox(dialog);
         auto* lowerTransitionPose = new QComboBox(dialog);
         const QStringList transitionPoses = {
@@ -1036,8 +1103,8 @@ m_uvPipeline.clearModel();
         lowerTransitionPose->setCurrentIndex(previous.lowerTransitionSmoothPose ? 1 : 0);
         form->addRow(QStringLiteral("上边界过渡点姿态"), upperTransitionPose);
         form->addRow(QStringLiteral("下边界过渡点姿态"), lowerTransitionPose);
-        upperTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹下边界点的完整姿态，前进方向偏移单独设置。下边界是离原点最近的一端。"));
-        lowerTransitionPose->setToolTip(QStringLiteral("平滑姿态：采用同一条轨迹上边界点的完整姿态，前进方向偏移单独设置。下边界是离原点最近的一端。"));
+        upperTransitionPose->setToolTip(QStringLiteral("默认姿态跟随本端边界姿态，边界前进方向由上面的逐段/整条轨迹平均设置决定；平滑姿态采用对端边界完整姿态。"));
+        lowerTransitionPose->setToolTip(QStringLiteral("默认姿态跟随本端边界姿态，边界前进方向由上面的逐段/整条轨迹平均设置决定；平滑姿态采用对端边界完整姿态。"));
         auto* upperTransitionOffset = new QComboBox(dialog);
         auto* lowerTransitionOffset = new QComboBox(dialog);
         const QStringList transitionOffsets = {
@@ -1134,7 +1201,7 @@ m_uvPipeline.clearModel();
         connect(forward, qOverload<int>(&QComboBox::currentIndexChanged), dialog, updatePreview);
         connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
         connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-        connect(dialog, &QDialog::finished, this, [this, dialog, normal, forward, upperTransitionPose, lowerTransitionPose, upperTransitionOffset, lowerTransitionOffset, upperNormal, lowerNormal, updatePreview](int result) {
+        connect(dialog, &QDialog::finished, this, [this, dialog, normal, forward, normalDirectionMode, forwardDirectionMode, boundaryNormalDirectionSign, upperTransitionPose, lowerTransitionPose, upperTransitionOffset, lowerTransitionOffset, upperNormal, lowerNormal, updatePreview](int result) {
         dialog->setObjectName(QString());
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("frameConfiguration"));
         if(result != QDialog::Accepted) return;
@@ -1159,6 +1226,10 @@ m_uvPipeline.clearModel();
             || trajectory.generationParams_.lowerTransitionNormalOffset != lowerNormal.enabled->isChecked()
             || trajectory.generationParams_.lowerTransitionFollowSprayDistance != lowerNormal.follow->isChecked()
             || trajectory.generationParams_.lowerTransitionSprayDistance != lowerNormal.distance->value();
+        const bool forwardDirectionModeChanged = trajectory.generationParams_.forwardDirectionMode != forwardDirectionMode->currentIndex();
+        const bool normalDirectionModeChanged = trajectory.generationParams_.normalDirectionMode != normalDirectionMode->currentIndex();
+        const int selectedBoundaryNormalSign = boundaryNormalDirectionSign->currentData().toInt() < 0 ? -1 : 1;
+        const bool boundaryNormalDirectionSignChanged = trajectory.generationParams_.boundaryNormalDirectionSign != selectedBoundaryNormalSign;
         trajectory.generationParams_.upperTransitionSmoothPose = upperTransitionPose->currentIndex() == 1;
         trajectory.generationParams_.upperTransitionOppositeOffset = upperTransitionOffset->currentIndex() == 1;
         trajectory.generationParams_.upperTransitionNormalOffset = upperNormal.enabled->isChecked();
@@ -1171,6 +1242,9 @@ m_uvPipeline.clearModel();
         trajectory.generationParams_.lowerTransitionSprayDistance = lowerNormal.distance->value();
         trajectory.generationParams_.normalAxis = normal->currentIndex();
         trajectory.generationParams_.forwardAxis = forward->currentIndex();
+        trajectory.generationParams_.normalDirectionMode = normalDirectionMode->currentIndex();
+        trajectory.generationParams_.forwardDirectionMode = forwardDirectionMode->currentIndex();
+        trajectory.generationParams_.boundaryNormalDirectionSign = selectedBoundaryNormalSign;
         QSettings settings;
         settings.setValue("freeform/upperTransitionSmoothPose", trajectory.generationParams_.upperTransitionSmoothPose);
         settings.setValue("freeform/upperTransitionOppositeOffset", trajectory.generationParams_.upperTransitionOppositeOffset);
@@ -1184,6 +1258,28 @@ m_uvPipeline.clearModel();
         settings.setValue("freeform/lowerTransitionSprayDistance", trajectory.generationParams_.lowerTransitionSprayDistance);
         settings.setValue("freeform/normalAxis", normal->currentIndex());
         settings.setValue("freeform/forwardAxis", forward->currentIndex());
+        settings.setValue("freeform/normalDirectionMode", normalDirectionMode->currentIndex());
+        settings.setValue("freeform/forwardDirectionMode", forwardDirectionMode->currentIndex());
+        settings.setValue("freeform/boundaryNormalDirectionSign", selectedBoundaryNormalSign);
+        bool regenerated = false;
+        if((forwardDirectionModeChanged || boundaryNormalDirectionSignChanged || normalDirectionModeChanged) &&
+            !m_generalData.trajData_.sampledBoundaryPoints_.empty()) {
+            regenerated = m_plan.generateMATLABTrajectory(
+                m_generalData,
+                m_generalData.slicingData_.managedParams_.numTrajectories,
+                m_generalData.trajData_.generationParams_.z1Offset,
+                m_generalData.trajData_.generationParams_.z2Offset,
+                m_generalData.trajData_.generationParams_.offsetDistance);
+            if(regenerated) {
+                m_generalData.trajData_.connectionData_ = {};
+                clearOverlay(m_context.visualizationViewport(), QStringLiteral("connections"));
+                if(m_previewUpdated) m_previewUpdated(m_renderer.makePreview(m_generalData.trajData_.trajectoryPoints_));
+                if(m_trajectoriesVisible) submitLineOverlay(
+                    m_context.visualizationViewport(), QStringLiteral("trajectoryFrames"),
+                    m_renderer.makeTrajectoryFramePreview(m_generalData.trajData_.trajectoryPoints_),
+                    m_algorithmToSceneScale);
+            }
+        }
         setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible, m_connectionsVisible, m_referenceLinesVisible);
         if(!trajectory.trajectoryPoints_.empty() && m_previewUpdated) m_previewUpdated(m_renderer.makePreview(trajectory.trajectoryPoints_));
         if(trajectory.trajectoryPoints_.empty()) updatePreview();
@@ -1193,7 +1289,11 @@ m_uvPipeline.clearModel();
 #endif
 
         publishSharedData();
-        showResult(true, transitionPoseChanged
+        showResult(true, regenerated
+            ? QStringLiteral("配置已保存，已按新的姿态设置重新生成轨迹；连接数据已清除，请重新连接轨迹。")
+            : normalDirectionModeChanged && !trajectory.trajectoryPoints_.empty()
+            ? QStringLiteral("配置已保存；请重新生成轨迹以应用新的法向计算方式。")
+            : transitionPoseChanged || forwardDirectionModeChanged || boundaryNormalDirectionSignChanged
             ? QStringLiteral("配置已保存，已有轨迹姿态已更新；请重新生成轨迹以应用过渡点姿态、偏移方向及喷涂距离。")
             : QStringLiteral("姿态配置已保存，已有轨迹姿态已更新。"));
         });
@@ -1451,6 +1551,7 @@ m_uvPipeline.clearModel();
 #if 0
     void FreeformTrajPlanWorkbenchController::refreshSlicingOverlays()
     {
+        if(!m_workbenchActive) return;
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("slicePlanes"));
         submitLineOverlay(m_context.visualizationViewport(), QStringLiteral("slices"),
             m_renderer.makeSlicingPreview(m_document.slicing()));
@@ -1605,6 +1706,7 @@ m_uvPipeline.clearModel();
 
     void FreeformTrajPlanWorkbenchController::refreshSlicingOverlays()
     {
+        if(!m_workbenchActive) return;
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("slices"));
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("sliceSurfaces"));
         if(m_slicesVisible) {
@@ -2051,6 +2153,10 @@ if(m_uvPlanning) {
                 snapshot.trajectory.segments.back().points.push_back(std::move(point));
             }
         }
+        if(m_workbenchActive && snapshot.hasTrajectory()) {
+            // The current planning path supersedes the previously retained program preview.
+            if(auto* viewport = m_context.visualizationViewport()) viewport->setCoatingTrajectoryPreview({}, false);
+        }
         m_dataSource->publish(std::move(snapshot));
     }
 
@@ -2065,6 +2171,7 @@ if(m_uvPlanning) {
 #endif
     void FreeformTrajPlanWorkbenchController::refreshUvTrajectoryOverlay()
     {
+        if(!m_workbenchActive) return;
         clearOverlay(m_context.visualizationViewport(), QStringLiteral("uvTrajectory"));
         if(!m_trajectoriesVisible) {
             return;
