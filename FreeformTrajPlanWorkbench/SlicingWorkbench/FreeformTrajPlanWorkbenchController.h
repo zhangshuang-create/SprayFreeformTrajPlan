@@ -3,6 +3,7 @@
 #include <QObject>
 #include "FreeformTrajPlanWorkbenchExport.h"
 #include "PlanningDataSource.h"
+#include "FreeformWorkpiecePlacement.h"
 #include "FreeformTrajPlanWorkbenchPanel.h"
 #include "FreeformTrajPlanRenderer.h"
 #include <SlicingTrajPlan/BurTrajPlan.h>
@@ -33,7 +34,8 @@ namespace smrobot::workbench::freeform
             FreeformTrajPlanPreviewClearedCallback previewCleared,
             QObject* parent = nullptr);
         bool activateWorkbench(QString& error);
-        bool deactivateWorkbench(bool restoreUserPlacement, QString& error, bool handoffToRobotRun = false);
+        bool deactivateWorkbench(bool restoreUserPlacement, QString& error,
+            robot_qt_viewer::FreeformTrajectoryHandoff handoff = robot_qt_viewer::FreeformTrajectoryHandoff::Retain);
         void handleEvent(const robot_qt_viewer::RobotQtViewerEvent& event);
     signals:
         void statusMessageRequested(const QString& message, int timeoutMs);

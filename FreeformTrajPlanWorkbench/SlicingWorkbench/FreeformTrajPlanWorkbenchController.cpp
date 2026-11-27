@@ -470,13 +470,14 @@ namespace smrobot::workbench::freeform
         return true;
     }
 
-    bool FreeformTrajPlanWorkbenchController::deactivateWorkbench(bool restoreUserPlacement, QString& error, bool handoffToRobotRun)
+    bool FreeformTrajPlanWorkbenchController::deactivateWorkbench(bool restoreUserPlacement, QString& error,
+        robot_qt_viewer::FreeformTrajectoryHandoff handoff)
     {
         const auto* trajectory = m_dataSource && m_dataSource->snapshot().hasTrajectory() ? &m_dataSource->snapshot() : nullptr;
         m_workbenchActive = false;
         for(auto* dialog : m_workflowPanel.findChildren<QDialog*>()) dialog->reject();
         clearAllOverlays(m_context.visualizationViewport());
-        if(restoreUserPlacement && !robot_qt_viewer::placeFreeformWorkpieces(m_context, false, error, trajectory, handoffToRobotRun)) {
+        if(restoreUserPlacement && !robot_qt_viewer::placeFreeformWorkpieces(m_context, false, error, trajectory, handoff)) {
             m_workbenchActive = true;
             setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible,
                 m_connectionsVisible, m_referenceLinesVisible);

@@ -31,9 +31,14 @@ namespace robot_qt_viewer
                 QString error;
                 const bool restore = context.cause != RobotQtViewerWorkbenchTransitionCause::ProjectReplacing &&
                     context.cause != RobotQtViewerWorkbenchTransitionCause::ApplicationShutdown;
-                const bool handoffToRobotRun = context.targetWorkbenchId ==
-                    robotQtViewerWorkbenchId(RobotQtViewerWorkbenchKind::Motion);
-                return m_controller.deactivateWorkbench(restore, error, handoffToRobotRun)
+                auto handoff = FreeformTrajectoryHandoff::Retain;
+                if(context.targetWorkbenchId == robotQtViewerWorkbenchId(RobotQtViewerWorkbenchKind::Motion)) {
+                    handoff = FreeformTrajectoryHandoff::RobotRun;
+                } else if(context.targetWorkbenchId == robotQtViewerWorkbenchId(RobotQtViewerWorkbenchKind::CoatingAnalysis) ||
+                    context.targetWorkbenchId == QStringLiteral("smrobot.mode.trajectory-optimization")) {
+                    handoff = FreeformTrajectoryHandoff::CoatingAnalysis;
+                }
+                return m_controller.deactivateWorkbench(restore, error, handoff)
                     ? workbenchTransitionSucceeded() : workbenchTransitionFailed(error);
             }
             RobotQtViewerWorkbenchTransitionResult activate(const RobotQtViewerWorkbenchActivationContext&) override {
