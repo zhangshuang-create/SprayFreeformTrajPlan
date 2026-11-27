@@ -11,17 +11,17 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QSpinBox>
 #include <QVBoxLayout>
-#include <algorithm>
 
 namespace
 {
+    constexpr int importModelRole = Qt::UserRole + 1;
+
     class PanelDoubleSpinBox final : public QDoubleSpinBox
     {
     public:
@@ -97,16 +97,16 @@ namespace smrobot::workbench::freeform
         importLayout->addWidget(new QLabel(QStringLiteral("项目工件"), importGroup));
         importLayout->addWidget(m_projectModels);
         setProjectModels({}, {});
-        connect(m_projectModels, qOverload<int>(&QComboBox::activated), this, [this] {
-            emit projectModelRequested(m_projectModels->currentData().toString());
-        });
-        m_modelPath = new QLineEdit(importGroup);
-        m_modelPath->setReadOnly(true);
-        m_modelPath->setPlaceholderText(QStringLiteral("选择曲面模型文件..."));
-        auto* importButton = new QPushButton(QStringLiteral("导入模型"), importGroup);
-        importLayout->addWidget(m_modelPath);
-        importLayout->addWidget(importButton);
-        connect(importButton, &QPushButton::clicked, this, [this]() {
+        connect(m_projectModels, qOverload<int>(&QComboBox::activated), this, [this](int index) {
+            if(!m_projectModels->itemData(index, importModelRole).toBool()) {
+                const QString id = m_projectModels->itemData(index).toString();
+                if(!id.isEmpty()) emit projectModelRequested(id);
+                return;
+            }
+            {
+                const QSignalBlocker blocker(m_projectModels);
+                m_projectModels->setCurrentIndex(m_selectedProjectModelIndex);
+            }
             const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("导入曲面模型"),
                 QString(), QStringLiteral("STL surface models (*.stl *.STL);;All files (*.*)"));
             if(!path.isEmpty()) {
@@ -251,19 +251,22 @@ namespace smrobot::workbench::freeform
     {
         const QSignalBlocker blocker(m_projectModels);
         m_projectModels->clear();
-        m_projectModels->addItem(workpieces.isEmpty() ? QStringLiteral("没有已加载的工件")
-                                                    : QStringLiteral("选择已加载的工件"));
+        m_projectModels->setPlaceholderText(workpieces.isEmpty() ? QStringLiteral("暂无工件，展开加载")
+                                                                : QStringLiteral("选择或加载工件"));
         for(const auto& item : workpieces) {
             m_projectModels->addItem(item.second, item.first);
             m_projectModels->setItemData(m_projectModels->count() - 1, item.first, Qt::ToolTipRole);
         }
-        m_projectModels->setCurrentIndex(std::max(0, m_projectModels->findData(selected)));
-        m_projectModels->setEnabled(!workpieces.isEmpty());
+        m_selectedProjectModelIndex = m_projectModels->findData(selected);
+        if(!workpieces.isEmpty()) m_projectModels->insertSeparator(m_projectModels->count());
+        m_projectModels->addItem(QStringLiteral("加载模型…"));
+        m_projectModels->setItemData(m_projectModels->count() - 1, true, importModelRole);
+        m_projectModels->setCurrentIndex(m_selectedProjectModelIndex);
     }
 
     void FreeformTrajPlanWorkflowPanel::setModelPath(const QString& path)
     {
-        m_modelPath->setText(path);
+        m_projectModels->setToolTip(path);
     }
 
     void FreeformTrajPlanWorkflowPanel::arrangeWith(FreeformTrajPlanParameterPanel& parameters)

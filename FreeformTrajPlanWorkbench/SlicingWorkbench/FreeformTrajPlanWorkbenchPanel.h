@@ -11,7 +11,6 @@ class QComboBox;
 class QDoubleSpinBox;
 class QSpinBox;
 class QLabel;
-class QLineEdit;
 class QStackedWidget;
 
 namespace smrobot::workbench::freeform
@@ -69,7 +68,7 @@ namespace smrobot::workbench::freeform
 
     private:
         QComboBox* m_projectModels = nullptr;
-        QLineEdit* m_modelPath = nullptr;
+        int m_selectedProjectModelIndex = -1;
         QLabel* m_status = nullptr;
         QStackedWidget* m_workflowStack = nullptr;
         QWidget* m_slicingActions = nullptr;
