@@ -7,4 +7,6 @@ set(${TARGET_NAME}_RequiredLibsPublic
     SMRobotWorkbenchCommon::RobotQtModulesShared
     Qt5::Widgets
 )
-set(${TARGET_NAME}_RequiredLibsPrivate)
+set(${TARGET_NAME}_RequiredLibsPrivate
+    SMRobotSpray::SprayThicknessPrediction
+)

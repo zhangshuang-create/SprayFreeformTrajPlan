@@ -1,5 +1,7 @@
 #include "FreeformTrajPlanWorkbenchPanel.h"
 
+#include <SprayThicknessPrediction/ThicknessPrediction.h>
+
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QCheckBox>
@@ -17,6 +19,8 @@
 #include <QStackedWidget>
 #include <QSpinBox>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace
 {
@@ -341,7 +345,19 @@ namespace smrobot::workbench::freeform
         slicingLayout->setContentsMargins(0, 0, 0, 0);
         auto* slicingGroup = new QGroupBox(QStringLiteral("切片规划参数"), slicingPage);
         auto* slicingForm = new QFormLayout(slicingGroup);
+        auto* calculateSpacing = new QPushButton(QStringLiteral("一键计算最优道间距"), slicingGroup);
+        calculateSpacing->setObjectName(QStringLiteral("freeformCalculateTrackSpacing"));
+        auto* rippleTolerance = new QComboBox(slicingGroup);
+        rippleTolerance->setObjectName(QStringLiteral("freeformTrackRippleTolerance"));
+        rippleTolerance->addItem(QStringLiteral("0.2% 极致均匀"), 0.002);
+        rippleTolerance->addItem(QStringLiteral("1.0% 黄金推荐"), 0.01);
+        rippleTolerance->addItem(QStringLiteral("3.0% 效率优先"), 0.03);
+        rippleTolerance->setCurrentIndex(1);
+        auto* spacingStatus = new QLabel(slicingGroup);
+        spacingStatus->setWordWrap(true);
+        spacingStatus->hide();
         m_trajectorySpacing = makeSpinBox(slicingGroup, 1.0, 0.001);
+        m_trajectorySpacing->setObjectName(QStringLiteral("freeformTrajectorySpacing"));
         m_trajectorySpacing->setToolTip(QStringLiteral("单层轮廓的弧长取点间距；轨迹数量为 0 时计算公共点数，各层点数相同。"));
         m_chordError = makeSpinBox(slicingGroup, 5.0, 0.001, QString());
         m_chordError->setDecimals(6);
@@ -366,12 +382,15 @@ namespace smrobot::workbench::freeform
         m_maxSliceCount->setValue(8);
         m_maxSliceCount->setObjectName(QStringLiteral("freeformSliceCount"));
         m_maxSliceCount->setToolTip(QStringLiteral("非双边界模式：0 按切片层间距计算 Z 向切片层数；正数指定层数并覆盖步距，1 层位于高度中点。双边界模式保持原切片层数限制。"));
+        slicingForm->addRow(calculateSpacing);
+        slicingForm->addRow(QStringLiteral("最佳喷涂距离"), m_sprayDistance);
         slicingForm->addRow(QStringLiteral("轨迹间距"), m_trajectorySpacing);
+        slicingForm->addRow(QStringLiteral("允许波纹率"), rippleTolerance);
+        slicingForm->addRow(spacingStatus);
         slicingForm->addRow(QStringLiteral("弦误差容差"), m_chordError);
         slicingForm->addRow(QStringLiteral("切片层间距"), m_minimumSpacing);
         slicingForm->addRow(QStringLiteral("大端偏置"), m_largeEndOffset);
         slicingForm->addRow(QStringLiteral("小端偏置"), m_smallEndOffset);
-        slicingForm->addRow(QStringLiteral("最佳喷涂距离"), m_sprayDistance);
         slicingForm->addRow(QStringLiteral("最佳速度"), m_speed);
         slicingForm->addRow(QStringLiteral("轨迹数量"), m_trajectoryCount);
         slicingForm->addRow(QStringLiteral("切片层数"), m_maxSliceCount);
@@ -502,7 +521,7 @@ namespace smrobot::workbench::freeform
             publishParameters();
         };
         for(QDoubleSpinBox* spinBox : { m_trajectorySpacing, m_chordError, m_minimumSpacing,
-                m_largeEndOffset, m_smallEndOffset, m_sprayDistance, m_speed }) {
+                m_largeEndOffset, m_smallEndOffset, m_speed }) {
             connect(spinBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
                 [publishSlicing](double) { publishSlicing(); });
         }
@@ -510,6 +529,29 @@ namespace smrobot::workbench::freeform
             connect(spinBox, qOverload<int>(&QSpinBox::valueChanged), this,
                 [publishSlicing](int) { publishSlicing(); });
         }
+        const auto updateRecommendedSpacing = [this, rippleTolerance, spacingStatus]() {
+            const double distanceMm = std::abs(m_sprayDistance->value());
+            const auto result = spraythickness::computeOptimalTrackSpacingMeters(
+                distanceMm * 0.001, rippleTolerance->currentData().toDouble());
+            // Round down to the spin box precision to stay within the ripple limit.
+            const double spacingMm = result ? std::floor(result->optimalSpacingMeters * 1.0e6) * 0.001 : 0.0;
+            if (spacingMm < m_trajectorySpacing->minimum()) {
+                spacingStatus->setText(distanceMm == 0.0
+                    ? QStringLiteral("请输入非零喷涂距离。")
+                    : QStringLiteral("当前喷涂距离和波纹率下无可填入的道间距。"));
+                spacingStatus->show();
+            } else {
+                spacingStatus->hide();
+                const QSignalBlocker block{m_trajectorySpacing};
+                m_trajectorySpacing->setValue(spacingMm);
+            }
+            publishParameters();
+        };
+        connect(calculateSpacing, &QPushButton::clicked, this, updateRecommendedSpacing);
+        connect(m_sprayDistance, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            updateRecommendedSpacing);
+        connect(rippleTolerance, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            updateRecommendedSpacing);
         const auto publishVisibility = [this, modelVisible, slicesVisible, trajectoriesVisible,
                                             referenceLinesVisible]() {
             emit visualizationVisibilityChanged(modelVisible->isChecked(), slicesVisible->isChecked(),

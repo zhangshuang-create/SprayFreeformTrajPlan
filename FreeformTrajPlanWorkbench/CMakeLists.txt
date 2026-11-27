@@ -39,6 +39,8 @@ target_link_libraries(${TARGET_NAME}
         SMRobotWorkbenchFreeformTrajPlan::FreeformTrajPlanRender
         SMRobotWorkbenchCommon::RobotQtModulesShared
         Qt5::Widgets
+    PRIVATE
+        SMRobotSpray::SprayThicknessPrediction
 )
 
 if(MSVC)
