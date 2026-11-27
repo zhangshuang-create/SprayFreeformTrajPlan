@@ -13,6 +13,9 @@
 #include "RobotQtViewerViewportPorts.h"
 #include "RobotQtViewerViewportServices.h"
 #include "ViewportReloadWorkflowController.h"
+#include "UserCoordinateFrame.h"
+#include <SimulationProject/AssetResolver.h>
+#include <SimulationProject/RuntimePaths.h>
 
 #include <SimulationProject/ProjectDocument.h>
 #include <VisualizationSDK/CustomMesh.h>
@@ -131,6 +134,23 @@ namespace
                 QStringLiteral("trajectoryFrames"), QStringLiteral("referenceLines"), QStringLiteral("frameConfiguration"), QStringLiteral("uvTrajectory") }) {
             clearOverlay(viewport, overlayId);
         }
+    }
+
+    bool loadPlanningMesh(const QString& path, ModelTrajPlan::GeneralData& data)
+    {
+        if(QFileInfo(path).suffix().compare(QStringLiteral("stl"), Qt::CaseInsensitive) != 0 ||
+            !QFileInfo(path).isFile()) return false;
+        try {
+            ModelTrajPlan::STLProcessor processor;
+            if(!processor.preprocessSTL(path.toStdString(), data.modelDataManager_) ||
+                data.modelDataManager_.totalTriangleCount_ == 0) return false;
+        } catch(const std::exception&) {
+            return false;
+        }
+        data.filePaths_ = {path.toStdString()};
+        data.processingState_.isSTLProcessed = true;
+        data.currentState_ = ModelTrajPlan::DataState::Loaded;
+        return true;
     }
 
     bool selectModelUnitScale(QWidget* parent, const QString& path, double* scaleToMeters)
@@ -403,6 +423,8 @@ namespace smrobot::workbench::freeform
         }
         connect(&workflowPanel, &FreeformTrajPlanWorkflowPanel::importModelRequested,
             this, &FreeformTrajPlanWorkbenchController::importModel);
+        connect(&workflowPanel, &FreeformTrajPlanWorkflowPanel::projectModelRequested,
+            this, &FreeformTrajPlanWorkbenchController::selectProjectModel);
         connect(&workflowPanel, &FreeformTrajPlanWorkflowPanel::planningMethodRequested,
             this, &FreeformTrajPlanWorkbenchController::setPlanningMethod);
         connect(&workflowPanel, &FreeformTrajPlanWorkflowPanel::slicingMethodRequested,
@@ -427,10 +449,19 @@ namespace smrobot::workbench::freeform
     {
         if(!robot_qt_viewer::placeFreeformWorkpieces(m_context, true, error)) return false;
         m_workbenchActive = true;
-        if(!m_modelObjectId.isEmpty()) {
-            if(auto* viewport = m_context.visualizationViewport())
-                viewport->setSceneObjectVisibilityOverride(m_modelObjectId, m_modelVisible);
+        refreshProjectModels();
+        if(m_modelObjectId.isEmpty()) {
+            const auto& document = m_context.document();
+            const auto selectedId = m_context.selectionModel().state().objectId.toStdString();
+            const auto eligible = [&](const auto& object) { return robot_qt_viewer::belongsToUserFrame(document, object); };
+            const auto selected = std::find_if(document.objects.begin(), document.objects.end(),
+                [&](const auto& object) { return object.id == selectedId && eligible(object); });
+            if(selected != document.objects.end()) selectProjectModel(QString::fromStdString(selected->id));
+            else if(std::count_if(document.objects.begin(), document.objects.end(), eligible) == 1) {
+                selectProjectModel(QString::fromStdString(std::find_if(document.objects.begin(), document.objects.end(), eligible)->id));
+            }
         }
+        refreshModelVisibility();
         if(!m_modelObjectId.isEmpty() && m_dataSource && m_dataSource->snapshot().hasTrajectory()) {
             if(auto* viewport = m_context.visualizationViewport()) viewport->setCoatingTrajectoryPreview({}, false);
         }
@@ -451,9 +482,7 @@ namespace smrobot::workbench::freeform
                 m_connectionsVisible, m_referenceLinesVisible);
             return false;
         }
-        if(auto* viewport = m_context.visualizationViewport()) {
-            if(!m_modelObjectId.isEmpty()) viewport->clearSceneObjectVisibilityOverride(m_modelObjectId);
-        }
+        clearModelVisibility();
         // Leave the connection data available without recreating its overlay on re-entry.
         if(restoreUserPlacement) m_parameterPanel.setConnectionsVisible(false);
         if(m_previewCleared) m_previewCleared();
@@ -465,11 +494,7 @@ namespace smrobot::workbench::freeform
         if(event.kind == robot_qt_viewer::RobotQtViewerEventKind::ProjectOpened) {
             for(auto* dialog : m_workflowPanel.findChildren<QDialog*>(QStringLiteral("slicingAdjustDialog"))) dialog->reject();
             if(auto* dialog = m_workflowPanel.findChild<QDialog*>(QStringLiteral("trajectoryFrameDialog"))) dialog->reject();
-            if(!m_modelObjectId.isEmpty()) {
-                if(auto* viewport = m_context.visualizationViewport()) {
-                    viewport->clearSceneObjectVisibilityOverride(m_modelObjectId);
-                }
-            }
+            clearModelVisibility();
             m_plan.clear(m_generalData);
             m_modelObjectId.clear();
             m_modelPath.clear();
@@ -489,8 +514,14 @@ m_uvPipeline.clearModel();
             m_workflowPanel.setModelPath(QString());
             m_workflowPanel.setPlanningMethod(spray_freeform_traj_plan::PlanningMethod::Slicing);
             m_parameterPanel.setPlanningMethod(spray_freeform_traj_plan::PlanningMethod::Slicing);
-            m_workflowPanel.setStatus(QStringLiteral("等待导入曲面模型。"), true);
+            m_workflowPanel.setStatus(QStringLiteral("请选择项目工件或导入曲面模型。"), true);
         }
+        if(event.kind == robot_qt_viewer::RobotQtViewerEventKind::ProjectOpened ||
+            event.kind == robot_qt_viewer::RobotQtViewerEventKind::ProjectDocumentChanged) {
+            refreshProjectModels();
+        }
+        if(m_workbenchActive && event.kind == robot_qt_viewer::RobotQtViewerEventKind::ViewportReloaded &&
+            event.viewport.reloadSucceeded) refreshModelVisibility();
     }
     void FreeformTrajPlanWorkbenchController::setPlanningMethod(bool uv)
     {
@@ -520,74 +551,17 @@ m_uvPipeline.clearModel();
         if(!selectModelUnitScale(&m_workflowPanel, path, &scaleToMeters)) {
             return;
         }
-        const QString previousObjectId = m_modelObjectId;
         ModelTrajPlan::GeneralData importedData;
-        ModelTrajPlan::STLProcessor stlProcessor;
-        if(!stlProcessor.preprocessSTL(path.toStdString(), importedData.modelDataManager_)) {
-            showResult(false, QStringLiteral("无法读取曲面模型。"));
+        if(!loadPlanningMesh(path, importedData)) {
+            showResult(false, QStringLiteral("无法读取曲面 STL 模型。"));
             return;
         }
-        // BurTrajPlan and its UI parameters use the STL's native millimetre
-        // coordinates. SceneObjectDesc owns the independent metres conversion
-        // for the platform viewport below; never apply that conversion here.
-        importedData.filePaths_ = { path.toStdString() };
-        importedData.processingState_.isSTLProcessed = true;
-        importedData.currentState_ = ModelTrajPlan::DataState::Loaded;
-
         robot_qt_viewer::SceneEntityWorkflowController sceneWorkflow(m_context);
         const auto importResult = sceneWorkflow.importSceneObjectFromPath(
-            std::filesystem::path(path.toStdWString()), "workpiece");
+            std::filesystem::path(path.toStdWString()), "workpiece", scaleToMeters);
         if(!importResult.success) {
             showResult(false, importResult.message);
             return;
-        }
-
-        // SceneObjectDesc defaults to scale 1.0. Make its displayed and collision
-        // geometry use the exact same unit conversion as the Document mesh.
-        const robot_qt_viewer::ProjectMutationResult scaleResult =
-            m_context.documentController().mutateProject(
-                QStringLiteral("freeformTrajPlan.setModelUnitScale"),
-                robot_qt_viewer::ProjectDirtyPolicy::UserEdit,
-                [&](simulation_project::ProjectDocumentService& service,
-                    bool& changed,
-                    std::string& error) {
-                    simulation_project::SceneObjectDesc* object =
-                        service.findSceneObject(importResult.entityId.toStdString());
-                    if(object == nullptr) {
-                        error = "Imported workpiece was not found in the project document.";
-                        return false;
-                    }
-
-                    changed = object->visualScale != scaleToMeters ||
-                        object->collisionScale != scaleToMeters;
-                    object->visualScale = scaleToMeters;
-                    object->collisionScale = scaleToMeters;
-                    return true;
-                });
-
-        if(!scaleResult.success) {
-            sceneWorkflow.restoreImportState(importResult);
-            robot_qt_viewer::ViewportReloadWorkflowController(m_context).reload(
-                QStringLiteral("freeformTrajPlan.restoreFailedModelImport"));
-            showResult(false, scaleResult.message);
-            return;
-        }
-
-        // Replace the previous workpiece only after the new model and its scale
-        // have both been stored successfully.
-        if(!previousObjectId.isEmpty()) {
-            if(auto* viewport = m_context.visualizationViewport()) {
-                viewport->clearSceneObjectVisibilityOverride(previousObjectId);
-            }
-            const auto deleteResult = sceneWorkflow.deleteEntity(
-                robot_qt_viewer::SceneEntityKind::Object, previousObjectId);
-            if(!deleteResult.success) {
-                sceneWorkflow.restoreImportState(importResult);
-                robot_qt_viewer::ViewportReloadWorkflowController(m_context).reload(
-                    QStringLiteral("freeformTrajPlan.restoreFailedModelReplacement"));
-                showResult(false, deleteResult.message);
-                return;
-            }
         }
 
         robot_qt_viewer::ViewportReloadWorkflowController reloadWorkflow(m_context);
@@ -600,17 +574,94 @@ m_uvPipeline.clearModel();
             return;
         }
 
-        m_modelObjectId = importResult.entityId;
         QString placementError;
         if(m_workbenchActive && !robot_qt_viewer::placeFreeformWorkpieces(m_context, true, placementError)) {
+            sceneWorkflow.restoreImportState(importResult);
+            reloadWorkflow.reload(QStringLiteral("freeformTrajPlan.restoreFailedModelImport"));
             showResult(false, placementError);
             return;
         }
-        if(!m_modelVisible) {
-            if(auto* viewport = m_context.visualizationViewport()) {
-                viewport->setSceneObjectVisibilityOverride(m_modelObjectId, false);
+        adoptModel(importResult.entityId, path, scaleToMeters, std::move(importedData));
+    }
+
+    void FreeformTrajPlanWorkbenchController::refreshProjectModels()
+    {
+        QVector<QPair<QString, QString>> models;
+        const auto& document = m_context.document();
+        for(const auto& object : document.objects) {
+            if(!robot_qt_viewer::belongsToUserFrame(document, object) || object.sourcePath.empty()) continue;
+            const auto id = QString::fromStdString(object.id);
+            models.append({id, QString::fromStdString(object.name.empty() ? object.id : object.name)});
+        }
+        if(!m_modelObjectId.isEmpty() && std::none_of(models.begin(), models.end(), [&](const auto& item) {
+            return item.first == m_modelObjectId;
+        })) {
+            requestWorkflowAction(spray_freeform_traj_plan::WorkflowAction::ClearModelData);
+        }
+        m_workflowPanel.setProjectModels(models, m_modelObjectId);
+    }
+
+    void FreeformTrajPlanWorkbenchController::selectProjectModel(const QString& id)
+    {
+        if(id.isEmpty() || id == m_modelObjectId) {
+            refreshProjectModels();
+            return;
+        }
+        const auto& session = m_context.projectSession();
+        const auto& document = session.document();
+        const auto found = std::find_if(document.objects.begin(), document.objects.end(),
+            [&](const auto& object) { return object.id == id.toStdString() && robot_qt_viewer::belongsToUserFrame(document, object); });
+        if(found == document.objects.end()) { refreshProjectModels(); return; }
+        const auto base = session.path().empty() ? simulation_project::RuntimePaths::applicationRoot() : session.path().parent_path();
+        const auto assetContext = simulation_project::AssetResolver::makeProjectContext(base, document);
+        const auto resolved = simulation_project::AssetResolver::resolveProjectPath(assetContext, found->sourcePath);
+        const QString path = QString::fromStdWString(resolved.wstring());
+        const double scale = found->visualScale;
+        ModelTrajPlan::GeneralData data;
+        if(!std::isfinite(scale) || scale <= 0.0 || !loadPlanningMesh(path, data)) {
+            refreshProjectModels();
+            showResult(false, QStringLiteral("无法将该工件载入曲面规划，请检查 STL 文件和模型比例。"));
+            return;
+        }
+        QString error;
+        if(m_workbenchActive && !robot_qt_viewer::placeFreeformWorkpieces(m_context, true, error)) {
+            refreshProjectModels();
+            showResult(false, error);
+            return;
+        }
+        adoptModel(id, path, scale, std::move(data));
+    }
+
+    void FreeformTrajPlanWorkbenchController::refreshModelVisibility()
+    {
+        auto* viewport = m_context.visualizationViewport();
+        if(!m_workbenchActive || !viewport || m_modelObjectId.isEmpty()) return;
+        for(const auto& object : m_context.document().objects) {
+            if(!robot_qt_viewer::belongsToUserFrame(m_context.document(), object)) continue;
+            const auto id = QString::fromStdString(object.id);
+            viewport->setSceneObjectVisibilityOverride(id, id == m_modelObjectId && m_modelVisible);
+        }
+    }
+
+    void FreeformTrajPlanWorkbenchController::clearModelVisibility()
+    {
+        if(auto* viewport = m_context.visualizationViewport()) {
+            for(const auto& object : m_context.document().objects) {
+                if(robot_qt_viewer::belongsToUserFrame(m_context.document(), object))
+                    viewport->clearSceneObjectVisibilityOverride(QString::fromStdString(object.id));
             }
         }
+    }
+
+    void FreeformTrajPlanWorkbenchController::adoptModel(const QString& id, const QString& path,
+        double scaleToMeters, ModelTrajPlan::GeneralData importedData)
+    {
+        for(auto* dialog : m_workflowPanel.findChildren<QDialog*>()) dialog->reject();
+        m_modelObjectId = id;
+        refreshModelVisibility();
+#if BUILD_UV_TRAJ_PLAN
+        m_uvPipeline.clearModel();
+#endif
         m_modelPath = path;
         m_algorithmToSceneScale = scaleToMeters;
         // Import creates a fresh algorithm document. Preserve values owned by
@@ -627,6 +678,7 @@ m_uvPipeline.clearModel();
         m_generalData.boundaryData_.epsilon_ = chordErrorTolerance;
         m_generalData.boundaryData_.minStep_ = minimumSpacing;
         m_workflowPanel.setModelPath(path);
+        refreshProjectModels();
         publishSharedData();
 
         // New model invalidates all temporary slice, trajectory, and connection overlays.
@@ -641,7 +693,7 @@ m_uvPipeline.clearModel();
             selectionViewport->selectSceneObject(m_modelObjectId);
         }
 
-        showResult(true, QStringLiteral("曲面模型已导入并显示：%1").arg(m_modelObjectId));
+        showResult(true, QStringLiteral("当前曲面规划工件为 %1").arg(m_modelObjectId));
     }
 
     void FreeformTrajPlanWorkbenchController::setSlicingMethod(bool adaptive)
@@ -885,22 +937,7 @@ if(m_uvPlanning) {
         const bool clearsModelData =
             action == spray_freeform_traj_plan::WorkflowAction::ClearModelData || clearsAllData;
         if(clearsModelData && !m_modelObjectId.isEmpty()) {
-            if(auto* viewport = m_context.visualizationViewport()) {
-                viewport->clearSceneObjectVisibilityOverride(m_modelObjectId);
-            }
-            robot_qt_viewer::SceneEntityWorkflowController sceneWorkflow(m_context);
-            const auto deleteResult = sceneWorkflow.deleteEntity(
-                robot_qt_viewer::SceneEntityKind::Object, m_modelObjectId);
-            if(!deleteResult.success) {
-                showResult(false, deleteResult.message);
-                return;
-            }
-            robot_qt_viewer::ViewportReloadWorkflowController reloadWorkflow(m_context);
-            const auto reloadResult = reloadWorkflow.reload(QStringLiteral("freeformTrajPlan.clearModel"));
-            if(!reloadResult.success) {
-                showResult(false, reloadResult.errorMessage);
-                return;
-            }
+            clearModelVisibility();
             m_modelObjectId.clear();
         }
         bool success = true;
@@ -1009,6 +1046,7 @@ m_uvPipeline.clearModel();
         }
         if(clearsModelData && success) {
             m_workflowPanel.setModelPath(QString());
+            refreshProjectModels();
         }
         if(action == spray_freeform_traj_plan::WorkflowAction::ClearTrajectoryData && success &&
             m_previewCleared) {

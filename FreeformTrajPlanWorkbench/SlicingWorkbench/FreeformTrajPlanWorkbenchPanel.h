@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QWidget>
+#include <QVector>
+#include <QPair>
 #include "FreeformTrajPlanWorkbenchExport.h"
 #include <SlicingTrajPlan/FreeformTrajPlanTypes.h>
 
@@ -52,18 +54,21 @@ namespace smrobot::workbench::freeform
     public:
         explicit FreeformTrajPlanWorkflowPanel(QWidget* parent = nullptr);
         void setModelPath(const QString& path);
+        void setProjectModels(const QVector<QPair<QString, QString>>& workpieces, const QString& selected);
         void setStatus(const QString& message, bool success);
         void arrangeWith(FreeformTrajPlanParameterPanel& parameters);
         void setPlanningMethod(spray_freeform_traj_plan::PlanningMethod method);
 
     signals:
         void importModelRequested(const QString& path);
+        void projectModelRequested(const QString& id);
         void planningMethodRequested(bool uv);
         void slicingMethodRequested(bool adaptive);
         void exportTrajectoryRequested(const QString& path, FreeformTrajPlanExportFormat format, double interpolationInterval);
         void workflowActionRequested(spray_freeform_traj_plan::WorkflowAction action);
 
     private:
+        QComboBox* m_projectModels = nullptr;
         QLineEdit* m_modelPath = nullptr;
         QLabel* m_status = nullptr;
         QStackedWidget* m_workflowStack = nullptr;

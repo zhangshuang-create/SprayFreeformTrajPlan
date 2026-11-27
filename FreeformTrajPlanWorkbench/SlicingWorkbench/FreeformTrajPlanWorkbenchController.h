@@ -39,6 +39,11 @@ namespace smrobot::workbench::freeform
         void statusMessageRequested(const QString& message, int timeoutMs);
     private:
         void importModel(const QString& path);
+        void selectProjectModel(const QString& id);
+        void refreshProjectModels();
+        void adoptModel(const QString& id, const QString& path, double scale, ModelTrajPlan::GeneralData data);
+        void refreshModelVisibility();
+        void clearModelVisibility();
         void exportTrajectory(const QString& path, FreeformTrajPlanExportFormat format, double interpolationInterval);
         void setPlanningMethod(bool uv);
         void setSlicingMethod(bool adaptive);

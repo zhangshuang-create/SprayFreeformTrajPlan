@@ -14,9 +14,11 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSizePolicy>
+#include <QSignalBlocker>
 #include <QStackedWidget>
 #include <QSpinBox>
 #include <QVBoxLayout>
+#include <algorithm>
 
 namespace
 {
@@ -88,6 +90,16 @@ namespace smrobot::workbench::freeform
 
         auto* importGroup = new QGroupBox(QStringLiteral("模型数据"), this);
         auto* importLayout = new QVBoxLayout(importGroup);
+        m_projectModels = new QComboBox(importGroup);
+        m_projectModels->setObjectName(QStringLiteral("freeformProjectModels"));
+        m_projectModels->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        m_projectModels->setMinimumContentsLength(8);
+        importLayout->addWidget(new QLabel(QStringLiteral("项目工件"), importGroup));
+        importLayout->addWidget(m_projectModels);
+        setProjectModels({}, {});
+        connect(m_projectModels, qOverload<int>(&QComboBox::activated), this, [this] {
+            emit projectModelRequested(m_projectModels->currentData().toString());
+        });
         m_modelPath = new QLineEdit(importGroup);
         m_modelPath->setReadOnly(true);
         m_modelPath->setPlaceholderText(QStringLiteral("选择曲面模型文件..."));
@@ -232,6 +244,21 @@ namespace smrobot::workbench::freeform
         m_status->setWordWrap(true);
         layout->addWidget(m_status);
         layout->addStretch(1);
+    }
+
+    void FreeformTrajPlanWorkflowPanel::setProjectModels(
+        const QVector<QPair<QString, QString>>& workpieces, const QString& selected)
+    {
+        const QSignalBlocker blocker(m_projectModels);
+        m_projectModels->clear();
+        m_projectModels->addItem(workpieces.isEmpty() ? QStringLiteral("没有已加载的工件")
+                                                    : QStringLiteral("选择已加载的工件"));
+        for(const auto& item : workpieces) {
+            m_projectModels->addItem(item.second, item.first);
+            m_projectModels->setItemData(m_projectModels->count() - 1, item.first, Qt::ToolTipRole);
+        }
+        m_projectModels->setCurrentIndex(std::max(0, m_projectModels->findData(selected)));
+        m_projectModels->setEnabled(!workpieces.isEmpty());
     }
 
     void FreeformTrajPlanWorkflowPanel::setModelPath(const QString& path)
