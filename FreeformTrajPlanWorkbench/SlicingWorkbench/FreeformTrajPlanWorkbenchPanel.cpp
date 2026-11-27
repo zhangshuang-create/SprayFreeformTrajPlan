@@ -351,7 +351,7 @@ namespace smrobot::workbench::freeform
         m_largeEndOffset->setObjectName(QStringLiteral("freeformLargeEndOffset"));
         m_smallEndOffset = makeSpinBox(slicingGroup, 100.0, 0.0);
         m_smallEndOffset->setObjectName(QStringLiteral("freeformSmallEndOffset"));
-        m_sprayDistance = makeSpinBox(slicingGroup, 50.0, -100000.0);
+        m_sprayDistance = makeSpinBox(slicingGroup, 0.0, -100000.0);
         m_sprayDistance->setObjectName(QStringLiteral("freeformSprayDistance"));
         m_sprayDistance->setToolTip(QStringLiteral(
             "有符号的法向偏移距离：负值相对于正值向相反一侧偏移，绝对值为偏移距离（mm）。"));
