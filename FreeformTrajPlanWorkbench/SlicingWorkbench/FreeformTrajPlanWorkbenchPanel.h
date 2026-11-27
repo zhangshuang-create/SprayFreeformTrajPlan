@@ -81,6 +81,7 @@ namespace smrobot::workbench::freeform
     public:
         explicit FreeformTrajPlanParameterPanel(QWidget* parent = nullptr);
         void publishParameters();
+        void setConnectionsVisible(bool visible);
         void setPlanningMethod(spray_freeform_traj_plan::PlanningMethod method);
 
     signals:
@@ -104,6 +105,7 @@ namespace smrobot::workbench::freeform
         QWidget* m_slicingPage = nullptr;
         QWidget* m_uvPage = nullptr;
         QWidget* m_visibilityGroup = nullptr;
+        QCheckBox* m_connectionsVisible = nullptr;
         QWidget* m_tcpGroup = nullptr;
         QDoubleSpinBox* m_trajectorySpacing = nullptr;
         QDoubleSpinBox* m_chordError = nullptr;

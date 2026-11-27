@@ -31,7 +31,10 @@ namespace robot_qt_viewer
                 QString error;
                 const bool restore = context.cause != RobotQtViewerWorkbenchTransitionCause::ProjectReplacing &&
                     context.cause != RobotQtViewerWorkbenchTransitionCause::ApplicationShutdown;
-                return m_controller.deactivateWorkbench(restore, error) ? workbenchTransitionSucceeded() : workbenchTransitionFailed(error);
+                const bool handoffToRobotRun = context.targetWorkbenchId ==
+                    robotQtViewerWorkbenchId(RobotQtViewerWorkbenchKind::Motion);
+                return m_controller.deactivateWorkbench(restore, error, handoffToRobotRun)
+                    ? workbenchTransitionSucceeded() : workbenchTransitionFailed(error);
             }
             RobotQtViewerWorkbenchTransitionResult activate(const RobotQtViewerWorkbenchActivationContext&) override {
                 QString error;

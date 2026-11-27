@@ -33,7 +33,7 @@ namespace smrobot::workbench::freeform
             FreeformTrajPlanPreviewClearedCallback previewCleared,
             QObject* parent = nullptr);
         bool activateWorkbench(QString& error);
-        bool deactivateWorkbench(bool restoreUserPlacement, QString& error);
+        bool deactivateWorkbench(bool restoreUserPlacement, QString& error, bool handoffToRobotRun = false);
         void handleEvent(const robot_qt_viewer::RobotQtViewerEvent& event);
     signals:
         void statusMessageRequested(const QString& message, int timeoutMs);

@@ -353,9 +353,10 @@ namespace smrobot::workbench::freeform
         auto* modelVisible = new QCheckBox(QStringLiteral("显示模型"), visibilityGroup);
         auto* slicesVisible = new QCheckBox(QStringLiteral("显示切片"), visibilityGroup);
         auto* trajectoriesVisible = new QCheckBox(QStringLiteral("显示轨迹"), visibilityGroup);
-        auto* connectionsVisible = new QCheckBox(QStringLiteral("显示连线"), visibilityGroup);
+        m_connectionsVisible = new QCheckBox(QStringLiteral("显示连线"), visibilityGroup);
+        m_connectionsVisible->setObjectName(QStringLiteral("freeformConnectionsVisible"));
         auto* referenceLinesVisible = new QCheckBox(QStringLiteral("显示参考线"), visibilityGroup);
-        for(QCheckBox* checkBox : { modelVisible, slicesVisible, trajectoriesVisible, connectionsVisible,
+        for(QCheckBox* checkBox : { modelVisible, slicesVisible, trajectoriesVisible, m_connectionsVisible,
                 referenceLinesVisible }) {
             checkBox->setChecked(true);
             visibilityLayout->addWidget(checkBox);
@@ -480,12 +481,12 @@ namespace smrobot::workbench::freeform
                 [publishSlicing](int) { publishSlicing(); });
         }
         const auto publishVisibility = [this, modelVisible, slicesVisible, trajectoriesVisible,
-                                            connectionsVisible, referenceLinesVisible]() {
+                                            referenceLinesVisible]() {
             emit visualizationVisibilityChanged(modelVisible->isChecked(), slicesVisible->isChecked(),
-                trajectoriesVisible->isChecked(), connectionsVisible->isChecked(),
+                trajectoriesVisible->isChecked(), m_connectionsVisible->isChecked(),
                 referenceLinesVisible->isChecked());
         };
-        for(QCheckBox* checkBox : { modelVisible, slicesVisible, trajectoriesVisible, connectionsVisible,
+        for(QCheckBox* checkBox : { modelVisible, slicesVisible, trajectoriesVisible, m_connectionsVisible,
                 referenceLinesVisible }) {
             connect(checkBox, &QCheckBox::toggled, this, [publishVisibility](bool) { publishVisibility(); });
         }
@@ -544,6 +545,11 @@ namespace smrobot::workbench::freeform
             connect(spinBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
                 [publishTcp](double) { publishTcp(); });
         }
+    }
+
+    void FreeformTrajPlanParameterPanel::setConnectionsVisible(bool visible)
+    {
+        m_connectionsVisible->setChecked(visible);
     }
 
     void FreeformTrajPlanParameterPanel::setPlanningMethod(

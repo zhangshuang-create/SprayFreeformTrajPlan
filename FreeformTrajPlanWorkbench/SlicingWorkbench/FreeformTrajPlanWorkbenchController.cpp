@@ -439,16 +439,23 @@ namespace smrobot::workbench::freeform
         return true;
     }
 
-    bool FreeformTrajPlanWorkbenchController::deactivateWorkbench(bool restoreUserPlacement, QString& error)
+    bool FreeformTrajPlanWorkbenchController::deactivateWorkbench(bool restoreUserPlacement, QString& error, bool handoffToRobotRun)
     {
         const auto* trajectory = m_dataSource && m_dataSource->snapshot().hasTrajectory() ? &m_dataSource->snapshot() : nullptr;
-        if(restoreUserPlacement && !robot_qt_viewer::placeFreeformWorkpieces(m_context, false, error, trajectory)) return false;
         m_workbenchActive = false;
         for(auto* dialog : m_workflowPanel.findChildren<QDialog*>()) dialog->reject();
         clearAllOverlays(m_context.visualizationViewport());
+        if(restoreUserPlacement && !robot_qt_viewer::placeFreeformWorkpieces(m_context, false, error, trajectory, handoffToRobotRun)) {
+            m_workbenchActive = true;
+            setVisualizationVisibility(m_modelVisible, m_slicesVisible, m_trajectoriesVisible,
+                m_connectionsVisible, m_referenceLinesVisible);
+            return false;
+        }
         if(auto* viewport = m_context.visualizationViewport()) {
             if(!m_modelObjectId.isEmpty()) viewport->clearSceneObjectVisibilityOverride(m_modelObjectId);
         }
+        // Leave the connection data available without recreating its overlay on re-entry.
+        if(restoreUserPlacement) m_parameterPanel.setConnectionsVisible(false);
         if(m_previewCleared) m_previewCleared();
         return true;
     }
@@ -2103,6 +2110,9 @@ m_uvPipeline.clearModel();
         snapshot.sceneScale = m_algorithmToSceneScale;
         snapshot.sprayAxis=m_uvPlanning?4:m_generalData.trajData_.generationParams_.normalAxis;
         snapshot.feedAxis=m_uvPlanning?2:m_generalData.trajData_.generationParams_.forwardAxis;
+        snapshot.previewSegmentsConnected = m_uvPlanning ||
+            (m_generalData.trajData_.connectionData_.isConnected_ &&
+                !m_generalData.trajData_.connectionData_.connectedTrajectory_.empty());
         snapshot.trajectory.name = snapshot.modelName.toStdString();
 
         if(!snapshot.hasModel()) { m_dataSource->clear(); return; }
@@ -2123,7 +2133,8 @@ if(m_uvPlanning) {
                 point.time=source.time; point.velocity=source.velocity*m_algorithmToSceneScale; point.acceleration=source.acceleration*m_algorithmToSceneScale;
                 point.targetDistance=source.sprayDistance*m_algorithmToSceneScale;
                 point.targetNormal=-point.tcpPose.linear().col(2); point.sprayEnabled=source.sprayEnabled;
-                point.pointType=source.sprayEnabled?spraytrajectory::SprayPathPointType::Regular:spraytrajectory::SprayPathPointType::AirMove;
+                point.pointType = source.pointType == 2 || !source.sprayEnabled
+                    ? spraytrajectory::SprayPathPointType::AirMove : spraytrajectory::SprayPathPointType::Regular;
                 snapshot.trajectory.segments.back().points.push_back(std::move(point));
             }
         } else
@@ -2144,6 +2155,7 @@ if(m_uvPlanning) {
                 point.velocity=(source.velocity>0?source.velocity:data.generationParams_.normalVelocity)*m_algorithmToSceneScale;
                 point.acceleration=source.acceleration*m_algorithmToSceneScale; point.targetDistance=source.spray_distance*m_algorithmToSceneScale;
                 point.sprayEnabled=true; point.workpieceRegionId=source.trajectory_index;
+                if(source.point_type == 2) point.pointType = spraytrajectory::SprayPathPointType::AirMove;
                 if(i>0) {
                     const double sourceDt=source.timestamp-points[i-1].timestamp;
                     const double travel=(source.pose.block<3,1>(0,3)-points[i-1].pose.block<3,1>(0,3)).norm()*m_algorithmToSceneScale;
